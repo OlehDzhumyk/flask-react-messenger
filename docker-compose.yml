@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  # Database Service
+  # We use PostgreSQL 15-alpine to keep the image size small while maintaining
+  # compatibility with modern SQL features needed for the project.
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=messenger_db
+    ports:
+      # Expose port 5432 to allow local development tools (like PyCharm Database tool)
+      # to connect directly to the containerized database.
+      - "5432:5432"
+    volumes:
+      # Persist database data in a named volume to survive container restarts.
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
