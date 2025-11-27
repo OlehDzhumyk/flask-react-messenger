@@ -65,7 +65,7 @@ def test_register_validation(client):
     """
     GIVEN a registration payload missing a required field (password)
     WHEN the request is sent
-    THEN the API should return 400 Bad Request.
+    THEN the API should return 400 Bad Request with an appropriate error message.
     """
     data = {
         "username": "incomplete",
@@ -76,4 +76,4 @@ def test_register_validation(client):
     response = client.post('/api/auth/register', json=data)
 
     assert response.status_code == 400
-    assert "Password is required" in response.json["error"]
+    assert "Username, email, and password are required" in response.json["error"]
