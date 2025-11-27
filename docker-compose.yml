@@ -2,8 +2,6 @@ version: '3.8'
 
 services:
   # Database Service
-  # We use PostgreSQL 15-alpine to keep the image size small while maintaining
-  # compatibility with modern SQL features needed for the project.
   db:
     image: postgres:15-alpine
     restart: always
@@ -12,12 +10,37 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=messenger_db
     ports:
-      # Expose port 5432 to allow local development tools (like PyCharm Database tool)
-      # to connect directly to the containerized database.
       - "5432:5432"
     volumes:
-      # Persist database data in a named volume to survive container restarts.
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Verify DB is ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend Service (Flask)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      # Map host port 5000 to container port 5000
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_DEBUG=1
+      # IMPORTANT: Inside Docker network, host is 'db', not 'localhost'
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/messenger_db
+      - SECRET_KEY=dev-secret-key-docker
+    depends_on:
+      # Wait for db service to be healthy before starting backend
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount source code for hot-reloading (changes on host reflect in container immediately)
+      - ./backend:/app
 
 volumes:
   postgres_data:
