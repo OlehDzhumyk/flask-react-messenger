@@ -48,6 +48,11 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
 
+    # Register Blueprints
+    # This connects the authentication routes to the main application.
+    from auth import bp as auth_bp
+    app.register_blueprint(auth_bp)
+
     # Register models to ensure SQLAlchemy is aware of them.
     # We import here to avoid circular dependencies (since models import db from app).
     with app.app_context():
