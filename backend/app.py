@@ -58,6 +58,9 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     from auth import bp as auth_bp
     app.register_blueprint(auth_bp)
 
+    from chat import bp as chat_bp
+    app.register_blueprint(chat_bp)
+
     # Register models to ensure SQLAlchemy is aware of them.
     with app.app_context():
         from models import User
