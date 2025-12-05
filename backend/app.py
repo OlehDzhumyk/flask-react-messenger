@@ -3,11 +3,13 @@ from typing import Optional, Dict, Any
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_jwt_extended import JWTManager
 
-# Initialize extensions globally so they can be imported by models.
+# Initialize extensions globally.
 # They remain unconfigured until init_app is called in the factory.
 db = SQLAlchemy()
 migrate = Migrate()
+jwt = JWTManager()
 
 
 def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
@@ -26,19 +28,22 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     # Default configuration
     app.config.from_mapping(
         SECRET_KEY='dev',
-        # Fallback to sqlite if DATABASE_URL is not set (e.g. locally without docker)
+        # Fallback to sqlite if DATABASE_URL is not set
         SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///local.db'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        # JWT Configuration
+        # In production, this must be a strong secret key loaded from environment variables.
+        JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY', 'super-secret-key-change-this'),
     )
 
     if test_config is None:
-        # load the instance config, if it exists, when not testing
+        # Load the instance config, if it exists, when not testing
         app.config.from_pyfile('config.py', silent=True)
     else:
-        # load the test config if passed in
+        # Load the test config if passed in
         app.config.from_mapping(test_config)
 
-    # ensure the instance folder exists
+    # Ensure the instance folder exists
     try:
         os.makedirs(app.instance_path)
     except OSError:
@@ -47,19 +52,19 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     # Initialize extensions with the app context
     db.init_app(app)
     migrate.init_app(app, db)
+    jwt.init_app(app)
 
     # Register Blueprints
-    # This connects the authentication routes to the main application.
     from auth import bp as auth_bp
     app.register_blueprint(auth_bp)
 
     # Register models to ensure SQLAlchemy is aware of them.
-    # We import here to avoid circular dependencies (since models import db from app).
     with app.app_context():
         from models import User
 
     @app.route('/hello')
     def hello():
+        """Simple health check route."""
         return 'Hello, World!'
 
     return app

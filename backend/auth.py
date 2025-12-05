@@ -1,11 +1,10 @@
 from flask import Blueprint, request, jsonify
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_jwt_extended import create_access_token
 from app import db
 from models import User
 
 # Create a Blueprint for authentication routes.
-# Using a blueprint allows us to organize related routes (auth)
-# and prefix them efficiently (e.g., /api/auth).
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 
@@ -27,7 +26,6 @@ def register():
     data = request.get_json()
 
     # Validation: Ensure all required fields are present.
-    # We explicitly check for password to satisfy the test requirements.
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
@@ -41,7 +39,6 @@ def register():
         return jsonify({'error': 'User already exists'}), 409
 
     # Security: Never store passwords in plain text.
-    # We use scrypt or pbkdf2 (default in werkzeug) to hash the password securely.
     hashed_password = generate_password_hash(password)
 
     new_user = User(
@@ -59,3 +56,47 @@ def register():
         return jsonify({'error': 'Database error'}), 500
 
     return jsonify({'message': 'User created successfully'}), 201
+
+
+@bp.route('/login', methods=['POST'])
+def login():
+    """
+    Authenticate a user and return a JWT token.
+
+    Expected JSON payload:
+    - email: str
+    - password: str
+
+    Returns:
+    - 200: Login successful, returns access_token.
+    - 400: Missing email or password.
+    - 401: Invalid credentials.
+    """
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+
+    # Validate input presence
+    if not email or not password:
+        return jsonify({'error': 'Email and password are required'}), 400
+
+    # Find user by email
+    user = User.query.filter_by(email=email).first()
+
+    # Verify user exists and password matches hash
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({'error': 'Invalid email or password'}), 401
+
+    # Generate JWT Token
+    # Using user.id as identity is recommended for database lookups in protected routes.
+    access_token = create_access_token(identity=str(user.id))
+
+    return jsonify({
+        'message': 'Login successful',
+        'access_token': access_token,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email
+        }
+    }), 200
