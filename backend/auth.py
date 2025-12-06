@@ -62,15 +62,44 @@ def register():
 def login():
     """
     Authenticate a user and return a JWT token.
-
-    Expected JSON payload:
-    - email: str
-    - password: str
-
-    Returns:
-    - 200: Login successful, returns access_token.
-    - 400: Missing email or password.
-    - 401: Invalid credentials.
+    ---
+    tags:
+      - Authentication
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - password
+          properties:
+            email:
+              type: string
+              example: alice@test.com
+            password:
+              type: string
+              example: password
+    responses:
+      200:
+        description: Login successful
+        schema:
+          type: object
+          properties:
+            access_token:
+              type: string
+            user:
+              type: object
+              properties:
+                id:
+                  type: integer
+                username:
+                  type: string
+                email:
+                  type: string
+      401:
+        description: Invalid credentials
     """
     data = request.get_json()
     email = data.get('email')

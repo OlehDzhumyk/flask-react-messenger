@@ -2,7 +2,7 @@ import os
 import logging
 from typing import Optional, Dict, Any
 from flask import Flask, request
-from extensions import db, migrate, jwt
+from extensions import db, migrate, jwt, swagger
 from flask_cors import CORS
 from commands import seed_db_command
 
@@ -27,6 +27,13 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
         SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///local.db'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY', 'super-secret-key-change-this'),
+        SWAGGER={
+            'title': 'Flask-React Messenger API',
+            'uiversion': 3,
+            'version': '1.0.0',
+            'description': 'API documentation for the Messenger application',
+            'specs_route': '/apidocs/'
+        }
     )
 
     if test_config is None:
@@ -46,6 +53,7 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    swagger.init_app(app)
 
     # Register Blueprints
     from auth import bp as auth_bp
