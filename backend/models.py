@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from app import db
+from extensions import db
 
 # Association table for Many-to-Many relationship between User and Chat.
 # As per requirements, this links users to their chats.
