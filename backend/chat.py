@@ -6,6 +6,33 @@ from models import User, Chat, Message
 bp = Blueprint('chat', __name__, url_prefix='/api/chats')
 
 
+@bp.route('', methods=['GET'])
+@jwt_required()
+def get_chats():
+    """
+    Retrieve all chats for the current user.
+    Returns a list of chats with the partner's details (for 1-to-1).
+    """
+    current_user_id = int(get_jwt_identity())
+    current_user = db.session.get(User, current_user_id)
+
+    results = []
+
+    # Iterate over the user's chats (accessed via the relationship defined in models)
+    for chat in current_user.chats:
+        # MVP Logic for 1-on-1: Find the participant who is NOT me.
+        # If group chats are added later, this logic needs to update.
+        partner = next((p for p in chat.participants if p.id != current_user_id), None)
+
+        results.append({
+            'id': chat.id,
+            'partner_id': partner.id if partner else None,
+            'partner_username': partner.username if partner else "Unknown",
+            # Optional: Add last message preview here if we had time
+        })
+
+    return jsonify(results), 200
+
 @bp.route('', methods=['POST'])
 @jwt_required()
 def create_chat():
@@ -113,3 +140,5 @@ def get_messages(chat_id):
     sorted_messages = sorted(chat.messages, key=lambda m: m.timestamp)
 
     return jsonify([msg.to_dict() for msg in sorted_messages]), 200
+
+
