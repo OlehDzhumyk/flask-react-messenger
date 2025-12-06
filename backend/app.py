@@ -13,15 +13,14 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     """
     app = Flask(__name__, instance_relative_config=True)
 
-    # We setup basic configuration to output to console (stdout).
-    # Docker captures stdout/stderr automatically.
+    # Setup Logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s [%(levelname)s] %(message)s',
         handlers=[logging.StreamHandler()]
     )
 
-    # Default configuration
+    # Configuration
     app.config.from_mapping(
         SECRET_KEY='dev',
         SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///local.db'),
@@ -67,8 +66,10 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     from auth import bp as auth_bp
     app.register_blueprint(auth_bp)
 
-    from chat import bp as chat_bp
+    # Import both blueprints from chat.py
+    from chat import chat_bp, message_bp
     app.register_blueprint(chat_bp)
+    app.register_blueprint(message_bp)
 
     from users import bp as users_bp
     app.register_blueprint(users_bp)
@@ -76,12 +77,9 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     with app.app_context():
         from models import User
 
+    # Request Logging Hook
     @app.after_request
     def log_request_info(response):
-        """
-        Log details about every request after it is processed.
-        Includes Method, Path, Status Code.
-        """
         app.logger.info(
             f"Request: {request.method} {request.path} | Status: {response.status_code}"
         )

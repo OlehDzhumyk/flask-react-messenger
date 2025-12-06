@@ -3,10 +3,16 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
 from models import User, Chat, Message
 
-bp = Blueprint('chat', __name__, url_prefix='/api/chats')
+# Blueprint 1: Handles Chat operations and sending messages to a chat.
+# Base URL: /api/chats
+chat_bp = Blueprint('chat', __name__, url_prefix='/api/chats')
+
+# Blueprint 2: Handles operations on specific messages (Edit/Delete).
+# Base URL: /api/messages
+message_bp = Blueprint('message', __name__, url_prefix='/api/messages')
 
 
-@bp.route('', methods=['GET'])
+@chat_bp.route('', methods=['GET'])
 @jwt_required()
 def get_chats():
     """
@@ -36,7 +42,9 @@ def get_chats():
 
     results = []
 
+    # Iterate over the user's chats
     for chat in current_user.chats:
+        # MVP Logic for 1-on-1: Find the participant who is NOT me.
         partner = next((p for p in chat.participants if p.id != current_user_id), None)
         results.append({
             'id': chat.id,
@@ -47,7 +55,7 @@ def get_chats():
     return jsonify(results), 200
 
 
-@bp.route('', methods=['POST'])
+@chat_bp.route('', methods=['POST'])
 @jwt_required()
 def create_chat():
     """
@@ -93,6 +101,7 @@ def create_chat():
 
     current_user = db.session.get(User, current_user_id)
 
+    # Note: In a real app, check if chat already exists here.
     new_chat = Chat()
     new_chat.participants.append(current_user)
     new_chat.participants.append(recipient)
@@ -107,7 +116,7 @@ def create_chat():
     return jsonify({'message': 'Chat created', 'chat_id': new_chat.id}), 201
 
 
-@bp.route('/<int:chat_id>/messages', methods=['POST'])
+@chat_bp.route('/<int:chat_id>/messages', methods=['POST'])
 @jwt_required()
 def send_message(chat_id):
     """
@@ -172,7 +181,7 @@ def send_message(chat_id):
     return jsonify(message.to_dict()), 201
 
 
-@bp.route('/<int:chat_id>/messages', methods=['GET'])
+@chat_bp.route('/<int:chat_id>/messages', methods=['GET'])
 @jwt_required()
 def get_messages(chat_id):
     """
@@ -190,19 +199,6 @@ def get_messages(chat_id):
     responses:
       200:
         description: List of messages
-        schema:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: integer
-              content:
-                type: string
-              timestamp:
-                type: string
-              author_id:
-                type: integer
       403:
         description: Access denied
       404:
@@ -221,3 +217,106 @@ def get_messages(chat_id):
     sorted_messages = sorted(chat.messages, key=lambda m: m.timestamp)
 
     return jsonify([msg.to_dict() for msg in sorted_messages]), 200
+
+
+# --- Message Control Routes (Edit/Delete) ---
+
+@message_bp.route('/<int:message_id>', methods=['PUT'])
+@jwt_required()
+def edit_message(message_id):
+    """
+    Edit a specific message.
+    ---
+    tags:
+      - Messages
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: message_id
+        type: integer
+        required: true
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - content
+          properties:
+            content:
+              type: string
+              example: Updated text
+    responses:
+      200:
+        description: Message updated
+      403:
+        description: Access denied (not author)
+      404:
+        description: Message not found
+    """
+    current_user_id = int(get_jwt_identity())
+    data = request.get_json()
+    new_content = data.get('content')
+
+    if not new_content:
+        return jsonify({'error': 'Content is required'}), 400
+
+    message = db.session.get(Message, message_id)
+    if not message:
+        return jsonify({'error': 'Message not found'}), 404
+
+    if message.user_id != current_user_id:
+        return jsonify({'error': 'Access denied'}), 403
+
+    message.content = new_content
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update message'}), 500
+
+    return jsonify(message.to_dict()), 200
+
+
+@message_bp.route('/<int:message_id>', methods=['DELETE'])
+@jwt_required()
+def delete_message(message_id):
+    """
+    Delete a specific message.
+    ---
+    tags:
+      - Messages
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: message_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Message deleted
+      403:
+        description: Access denied (not author)
+      404:
+        description: Message not found
+    """
+    current_user_id = int(get_jwt_identity())
+
+    message = db.session.get(Message, message_id)
+    if not message:
+        return jsonify({'error': 'Message not found'}), 404
+
+    if message.user_id != current_user_id:
+        return jsonify({'error': 'Access denied'}), 403
+
+    try:
+        db.session.delete(message)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete message'}), 500
+
+    return jsonify({'message': 'Message deleted'}), 200
