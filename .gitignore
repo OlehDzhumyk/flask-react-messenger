@@ -1,14 +1,13 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
 venv/
+__pycache__/
+*.pyc
 .env
-
-# PyCharm / IDE
-.idea/
-
-# Node / React
-node_modules/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
 build/
 .DS_Store
+.idea/
+.vscode/
+postgres_data/
