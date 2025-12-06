@@ -1,14 +1,27 @@
 import os
+import logging
 from typing import Optional, Dict, Any
-from flask import Flask
+from flask import Flask, request
 from extensions import db, migrate, jwt
 from flask_cors import CORS
 from commands import seed_db_command
 
-
 def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
+    """
+    Application Factory Pattern.
+    Creates and configures an instance of the Flask application.
+    """
     app = Flask(__name__, instance_relative_config=True)
 
+    # We setup basic configuration to output to console (stdout).
+    # Docker captures stdout/stderr automatically.
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[logging.StreamHandler()]
+    )
+
+    # Default configuration
     app.config.from_mapping(
         SECRET_KEY='dev',
         SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///local.db'),
@@ -21,6 +34,7 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     else:
         app.config.from_mapping(test_config)
 
+    # CORS Setup
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     try:
@@ -46,8 +60,20 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     with app.app_context():
         from models import User
 
+    @app.after_request
+    def log_request_info(response):
+        """
+        Log details about every request after it is processed.
+        Includes Method, Path, Status Code.
+        """
+        app.logger.info(
+            f"Request: {request.method} {request.path} | Status: {response.status_code}"
+        )
+        return response
+
     @app.route('/hello')
     def hello():
+        app.logger.info("Hello endpoint was called manually")
         return 'Hello, World!'
 
     # Register CLI command
