@@ -32,7 +32,15 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
             'uiversion': 3,
             'version': '1.0.0',
             'description': 'API documentation for the Messenger application',
-            'specs_route': '/apidocs/'
+            'specs_route': '/apidocs/',
+            'securityDefinitions': {
+                'Bearer': {
+                    'type': 'apiKey',
+                    'name': 'Authorization',
+                    'in': 'header',
+                    'description': "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\""
+                }
+            }
         }
     )
 

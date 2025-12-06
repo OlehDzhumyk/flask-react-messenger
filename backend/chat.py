@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
 from models import User, Chat, Message
+
 bp = Blueprint('chat', __name__, url_prefix='/api/chats')
 
 
@@ -10,35 +11,71 @@ bp = Blueprint('chat', __name__, url_prefix='/api/chats')
 def get_chats():
     """
     Retrieve all chats for the current user.
-    Returns a list of chats with the partner's details (for 1-to-1).
+    ---
+    tags:
+      - Chats
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of active chats
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              partner_id:
+                type: integer
+              partner_username:
+                type: string
     """
     current_user_id = int(get_jwt_identity())
     current_user = db.session.get(User, current_user_id)
 
     results = []
 
-    # Iterate over the user's chats (accessed via the relationship defined in models)
     for chat in current_user.chats:
-        # MVP Logic for 1-on-1: Find the participant who is NOT me.
-        # If group chats are added later, this logic needs to update.
         partner = next((p for p in chat.participants if p.id != current_user_id), None)
-
         results.append({
             'id': chat.id,
             'partner_id': partner.id if partner else None,
             'partner_username': partner.username if partner else "Unknown",
-            # Optional: Add last message preview here if we had time
         })
 
     return jsonify(results), 200
+
 
 @bp.route('', methods=['POST'])
 @jwt_required()
 def create_chat():
     """
-    Create a new 1-to-1 chat between the current user and a recipient.
-
-    Expected JSON: { "recipient_id": int }
+    Create a new 1-to-1 chat.
+    ---
+    tags:
+      - Chats
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - recipient_id
+          properties:
+            recipient_id:
+              type: integer
+              example: 2
+    responses:
+      201:
+        description: Chat created
+      400:
+        description: Invalid input or self-chat
+      404:
+        description: Recipient not found
     """
     current_user_id = int(get_jwt_identity())
     data = request.get_json()
@@ -50,15 +87,11 @@ def create_chat():
     if current_user_id == recipient_id:
         return jsonify({'error': 'Cannot chat with yourself'}), 400
 
-    # Check if recipient exists
     recipient = db.session.get(User, recipient_id)
     if not recipient:
         return jsonify({'error': 'Recipient not found'}), 404
 
     current_user = db.session.get(User, current_user_id)
-
-    # Logic to check if chat already exists could go here,
-    # but for MVP we simply create a new chat room.
 
     new_chat = Chat()
     new_chat.participants.append(current_user)
@@ -79,8 +112,34 @@ def create_chat():
 def send_message(chat_id):
     """
     Send a message to a specific chat.
-
-    Expected JSON: { "content": str }
+    ---
+    tags:
+      - Messages
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: chat_id
+        type: integer
+        required: true
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - content
+          properties:
+            content:
+              type: string
+              example: Hello there!
+    responses:
+      201:
+        description: Message sent
+      403:
+        description: Access denied (not a participant)
+      404:
+        description: Chat not found
     """
     current_user_id = int(get_jwt_identity())
     data = request.get_json()
@@ -89,13 +148,10 @@ def send_message(chat_id):
     if not content:
         return jsonify({'error': 'Message content is required'}), 400
 
-    # Verify chat exists
     chat = db.session.get(Chat, chat_id)
     if not chat:
         return jsonify({'error': 'Chat not found'}), 404
 
-    # Verify user is a participant in this chat
-    # This is a critical security check (Authorization)
     is_participant = any(user.id == current_user_id for user in chat.participants)
     if not is_participant:
         return jsonify({'error': 'Access denied'}), 403
@@ -121,6 +177,36 @@ def send_message(chat_id):
 def get_messages(chat_id):
     """
     Retrieve message history for a specific chat.
+    ---
+    tags:
+      - Messages
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: chat_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: List of messages
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              content:
+                type: string
+              timestamp:
+                type: string
+              author_id:
+                type: integer
+      403:
+        description: Access denied
+      404:
+        description: Chat not found
     """
     current_user_id = int(get_jwt_identity())
 
@@ -128,16 +214,10 @@ def get_messages(chat_id):
     if not chat:
         return jsonify({'error': 'Chat not found'}), 404
 
-    # Security check
     is_participant = any(user.id == current_user_id for user in chat.participants)
     if not is_participant:
         return jsonify({'error': 'Access denied'}), 403
 
-    # Return messages ordered by timestamp
-    # Assuming the relationship in models.py is loaded or we access via chat.messages
-    # We sort them to be sure, though DB usually inserts sequentially.
     sorted_messages = sorted(chat.messages, key=lambda m: m.timestamp)
 
     return jsonify([msg.to_dict() for msg in sorted_messages]), 200
-
-

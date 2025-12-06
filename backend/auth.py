@@ -12,16 +12,36 @@ bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 def register():
     """
     Register a new user.
-
-    Expected JSON payload:
-    - username: str
-    - email: str
-    - password: str
-
-    Returns:
-    - 201: User created successfully.
-    - 400: Missing required fields.
-    - 409: User already exists.
+    ---
+    tags:
+      - Authentication
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - username
+            - email
+            - password
+          properties:
+            username:
+              type: string
+              example: newuser
+            email:
+              type: string
+              example: new@test.com
+            password:
+              type: string
+              example: secret123
+    responses:
+      201:
+        description: User created successfully
+      400:
+        description: Missing required fields
+      409:
+        description: User already exists
     """
     data = request.get_json()
 
