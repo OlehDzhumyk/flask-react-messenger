@@ -31,9 +31,6 @@ def test_create_chat_and_send_message(client, app):
     auth_headers = get_auth_header(client, u1_creds['email'], u1_creds['password'])
 
     # 3. Create Chat (POST /api/chats)
-    # We need to know User B's ID implies we might need a user search,
-    # but for MVP test we can query DB or just assume ID 2 if DB was clean.
-    # Let's query DB to be safe in test.
     with app.app_context():
         user_b = User.query.filter_by(email='b@test.com').first()
         user_b_id = user_b.id
@@ -70,3 +67,42 @@ def test_create_chat_and_send_message(client, app):
     assert len(messages) == 1
     assert messages[0]['content'] == 'Hello from User A'
     assert messages[0]['author_id'] is not None
+
+
+# Fixed indentation: This function is now at the top level
+def test_get_user_chats(client, app):
+    """
+    GIVEN a user with an existing chat
+    WHEN GET /api/chats is called
+    THEN it should return the list of chats with partner info.
+    """
+    # 1. Setup users
+    u1 = {'username': 'me', 'email': 'me@test.com', 'password': 'pass'}
+    u2 = {'username': 'partner', 'email': 'partner@test.com', 'password': 'pass'}
+
+    client.post('/api/auth/register', json=u1)
+    client.post('/api/auth/register', json=u2)
+
+    auth_headers = get_auth_header(client, u1['email'], u1['password'])
+
+    # 2. Create Chat
+    with app.app_context():
+        u2_db = User.query.filter_by(email='partner@test.com').first()
+        u2_id = u2_db.id
+
+    client.post(
+        '/api/chats',
+        json={'recipient_id': u2_id},
+        headers=auth_headers
+    )
+
+    # 3. Get Chats
+    response = client.get('/api/chats', headers=auth_headers)
+
+    # This assertion is expected to FAIL (405 or 404) initially
+    assert response.status_code == 200
+    data = response.json
+    assert isinstance(data, list)
+    assert len(data) == 1
+    # Critical: check if we get the partner's name for the UI
+    assert data[0]['partner_username'] == 'partner'
