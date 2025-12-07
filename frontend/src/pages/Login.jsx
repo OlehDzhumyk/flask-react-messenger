@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import authService from '../services/auth';
 import { useAuth } from '../context/AuthContext';
 import { useState } from 'react';
+import {toast} from "react-hot-toast";
 
 const Login = () => {
     const navigate = useNavigate();
@@ -20,15 +21,14 @@ const Login = () => {
             password: Yup.string().required('Required'),
         }),
         onSubmit: async (values) => {
-            setError(null);
             try {
                 const data = await authService.login(values.email, values.password);
-                // data structure depends on your backend response for /auth/login
-                // assuming it returns { access_token: "...", user: {...} }
                 login(data.user, data.access_token);
-                navigate('/'); // Redirect to dashboard
+                toast.success(`Welcome back, ${data.user.username}!`); // Приємний бонус
+                navigate('/');
             } catch (err) {
-                setError(err.response?.data?.message || 'Failed to login');
+                const msg = err.response?.data?.message || 'Failed to login';
+                toast.error(msg);
             }
         },
     });
