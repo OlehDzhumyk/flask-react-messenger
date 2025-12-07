@@ -5,89 +5,59 @@ import chatService from '../../services/chatService';
 import { useAuth } from '../../context/AuthContext';
 import { useUsers } from '../../context/UsersContext';
 import { getChatPartner } from '../../utils/chatHelpers';
+import { DELETED_USER } from '../../utils/constants';
+
+// Components
 import SidebarItem from './SidebarItem';
 import SettingsModal from './SettingsModal';
-import { DELETED_USER } from '../../utils/constants';
+import NewChatModal from './NewChatModal';
 
 const Sidebar = ({ onChatSelect, onUserSelect }) => {
     const [chats, setChats] = useState([]);
-    const [searchResults, setSearchResults] = useState([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isSearching, setIsSearching] = useState(false);
 
-    // State for Settings Modal
+    // Local Filter State
+    const [filterQuery, setFilterQuery] = useState('');
+
+    // Modals State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isNewChatOpen, setIsNewChatOpen] = useState(false);
 
     const { user: currentUser, logout } = useAuth();
     const { cacheUsers } = useUsers();
 
-    // 1. Fetch active chats & Cache Users on mount
-    useEffect(() => {
-        let isMounted = true;
+    // 1. Fetch Chats Logic
+    const fetchChats = async () => {
+        try {
+            const data = await chatService.getAllChats();
+            const chatList = Array.isArray(data) ? data : [];
+            setChats(chatList);
 
-        const fetchChats = async () => {
-            try {
-                const data = await chatService.getAllChats();
-
-                if (isMounted) {
-                    const chatList = Array.isArray(data) ? data : [];
-                    setChats(chatList);
-
-                    // Extract all participants from all chats
-                    const allParticipants = chatList.flatMap(c => c.participants || []);
-
-                    if (allParticipants.length > 0) {
-                        // Filter out null/undefined IDs before caching to avoid errors
-                        const validParticipants = allParticipants.filter(p => p && p.id);
-                        if (validParticipants.length > 0) {
-                            console.log('[Sidebar] Caching users:', validParticipants.length);
-                            cacheUsers(validParticipants);
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error("[Sidebar] Failed to load chats", error);
+            const allParticipants = chatList.flatMap(c => c.participants || []);
+            const validParticipants = allParticipants.filter(p => p && p.id);
+            if (validParticipants.length > 0) {
+                cacheUsers(validParticipants);
             }
-        };
-
-        if (currentUser) {
-            fetchChats();
+        } catch (error) {
+            console.error("[Sidebar] Failed to load chats", error);
         }
+    };
 
-        return () => { isMounted = false; };
+    useEffect(() => {
+        if (currentUser) fetchChats();
     }, [currentUser, cacheUsers]);
 
-    // 2. Search Logic (Debounced)
-    useEffect(() => {
-        const timeoutId = setTimeout(async () => {
-            if (!searchQuery.trim()) {
-                setSearchResults([]);
-                setIsSearching(false);
-                return;
-            }
 
-            setIsSearching(true);
-            try {
-                const data = await userService.searchUsers(searchQuery);
-                const results = Array.isArray(data) ? data : [];
-                setSearchResults(results);
+    // 2. Local Filter Logic
+    const filteredChats = chats.filter(chat => {
+        const partner = getChatPartner(chat, currentUser);
+        const name = partner.username || '';
+        return name.toLowerCase().includes(filterQuery.toLowerCase());
+    });
 
-                // Cache search results so SidebarItem can find them by ID
-                if (results.length > 0) {
-                    cacheUsers(results);
-                }
-            } catch (error) {
-                console.error("[Sidebar] Search failed", error);
-            }
-        }, 300);
-
-        return () => clearTimeout(timeoutId);
-    }, [searchQuery, cacheUsers]);
-
-    const handleUserClick = (targetUser) => {
-        setSearchQuery('');
-        setIsSearching(false);
-        onUserSelect(targetUser);
+    // 3. Handle new chat
+    const handleChatCreated = (newChat) => {
+        fetchChats();
+        onChatSelect(newChat);
     };
 
     return (
@@ -98,10 +68,21 @@ const Sidebar = ({ onChatSelect, onUserSelect }) => {
                     <h2 className="font-bold text-gray-700 text-xl">Chats</h2>
 
                     <div className="flex items-center gap-1">
-                        {/* Settings Button */}
+                        {/* New Chat Button (+) */}
+                        <button
+                            onClick={() => setIsNewChatOpen(true)}
+                            className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full transition-all"
+                            title="New Chat"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                        </button>
+
+                        {/* Settings Button (Gear) */}
                         <button
                             onClick={() => setIsSettingsOpen(true)}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all"
                             title="Settings"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -110,75 +91,62 @@ const Sidebar = ({ onChatSelect, onUserSelect }) => {
                             </svg>
                         </button>
 
-                        {/* Logout Button */}
+                        {/* Logout Button (Restored) */}
                         <button
                             onClick={logout}
-                            className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors px-2 py-1 rounded hover:bg-red-50"
+                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
+                            title="Logout"
                         >
-                            Logout
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                            </svg>
                         </button>
                     </div>
                 </div>
 
-                {/* Search Input */}
+                {/* Local Filter Input */}
                 <input
                     type="text"
-                    placeholder="Search users..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                    placeholder="Filter chats..."
+                    value={filterQuery}
+                    onChange={(e) => setFilterQuery(e.target.value)}
+                    className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow bg-gray-50 focus:bg-white"
                 />
             </div>
 
             {/* List Content */}
             <div className="flex-1 overflow-y-auto">
-                {isSearching ? (
-                    <div>
-                        <div className="px-4 py-2 text-xs font-semibold text-gray-400 bg-gray-50 uppercase">
-                            Global Search
-                        </div>
-                        {searchResults.length === 0 ? (
-                            <div className="p-4 text-center text-sm text-gray-400">No users found</div>
-                        ) : (
-                            searchResults.map(user => (
-                                <SidebarItem
-                                    key={user.id}
-                                    userId={user.id}
-                                    subText={user.email}
-                                    onClick={() => handleUserClick(user)}
-                                />
-                            ))
-                        )}
+                {filteredChats.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400 text-sm">
+                        {filterQuery ? 'No chats found' : 'No chats yet'}
                     </div>
                 ) : (
-                    <div>
-                        {chats.length === 0 && (
-                            <div className="p-8 text-center text-gray-400 text-sm">
-                                No chats yet. <br/> Search to start a conversation.
-                            </div>
-                        )}
-                        {chats.map(chat => {
-                            const partner = getChatPartner(chat, currentUser);
-                            // Fallback to DELETED_USER ID (-1) if partner ID is missing (null/undefined)
-                            const displayId = partner.id || DELETED_USER.id;
+                    filteredChats.map(chat => {
+                        const partner = getChatPartner(chat, currentUser);
+                        const displayId = partner.id || DELETED_USER.id;
 
-                            return (
-                                <SidebarItem
-                                    key={chat.id}
-                                    userId={displayId}
-                                    subText={'Click to view messages'}
-                                    onClick={() => onChatSelect(chat)}
-                                />
-                            );
-                        })}
-                    </div>
+                        return (
+                            <SidebarItem
+                                key={chat.id}
+                                userId={displayId}
+                                subText={'Click to view messages'}
+                                onClick={() => onChatSelect(chat)}
+                            />
+                        );
+                    })
                 )}
             </div>
 
-            {/* Settings Modal */}
+            {/* Modals */}
             <SettingsModal
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
+            />
+
+            <NewChatModal
+                isOpen={isNewChatOpen}
+                onClose={() => setIsNewChatOpen(false)}
+                onChatCreated={handleChatCreated}
             />
         </div>
     );

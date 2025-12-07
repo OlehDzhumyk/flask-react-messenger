@@ -59,7 +59,7 @@ def get_chats():
 @jwt_required()
 def create_chat():
     """
-    Create a new 1-to-1 chat.
+    Create a new 1-to-1 chat or return existing one.
     ---
     tags:
       - Chats
@@ -78,6 +78,8 @@ def create_chat():
               type: integer
               example: 2
     responses:
+      200:
+        description: Chat already exists (returns existing ID)
       201:
         description: Chat created
       400:
@@ -100,6 +102,26 @@ def create_chat():
         return jsonify({'error': 'Recipient not found'}), 404
 
     current_user = db.session.get(User, current_user_id)
+
+    # --- LOGIC TO PREVENT DUPLICATES ---
+    # Check if a 1-on-1 chat already exists between these two users
+    existing_chat = None
+
+    for chat in current_user.chats:
+        # We look for a chat with exactly 2 participants
+        if len(chat.participants) == 2:
+            participant_ids = [p.id for p in chat.participants]
+            # If the recipient is in this chat, we found it
+            if recipient.id in participant_ids:
+                existing_chat = chat
+                break
+
+    if existing_chat:
+        return jsonify({
+            'message': 'Chat already exists',
+            'chat_id': existing_chat.id
+        }), 200
+    # -----------------------------------
 
     # Note: In a real app, check if chat already exists here.
     new_chat = Chat()
