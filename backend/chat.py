@@ -186,6 +186,9 @@ def send_message(chat_id):
 def get_messages(chat_id):
     """
     Retrieve message history for a specific chat.
+    Query Params:
+      - limit: int (default 50) - Max messages to return
+      - after_id: int (optional) - Return only messages after this ID (for polling)
     ---
     tags:
       - Messages
@@ -196,6 +199,14 @@ def get_messages(chat_id):
         name: chat_id
         type: integer
         required: true
+      - in: query
+        name: limit
+        type: integer
+        description: Limit number of messages
+      - in: query
+        name: after_id
+        type: integer
+        description: Get messages created after this ID
     responses:
       200:
         description: List of messages
@@ -206,6 +217,10 @@ def get_messages(chat_id):
     """
     current_user_id = int(get_jwt_identity())
 
+    # Get query params
+    limit = request.args.get('limit', 50, type=int)
+    after_id = request.args.get('after_id', type=int)
+
     chat = db.session.get(Chat, chat_id)
     if not chat:
         return jsonify({'error': 'Chat not found'}), 404
@@ -214,9 +229,24 @@ def get_messages(chat_id):
     if not is_participant:
         return jsonify({'error': 'Access denied'}), 403
 
-    sorted_messages = sorted(chat.messages, key=lambda m: m.timestamp)
+    # Build Query
+    query = Message.query.filter_by(chat_id=chat_id)
 
-    return jsonify([msg.to_dict() for msg in sorted_messages]), 200
+    if after_id:
+        # Polling Mode: Get everything new
+        query = query.filter(Message.id > after_id).order_by(Message.timestamp.asc())
+    else:
+        # Initial Load: Get latest N messages
+        # We order by desc to get latest, then reverse in python to show chronologically
+        query = query.order_by(Message.timestamp.desc()).limit(limit)
+
+    messages = query.all()
+
+    # If we fetched by DESC (limit), we need to reverse list to show oldest->newest
+    if not after_id:
+        messages = messages[::-1]
+
+    return jsonify([msg.to_dict() for msg in messages]), 200
 
 
 # --- Message Control Routes (Edit/Delete) ---
