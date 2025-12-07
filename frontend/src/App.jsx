@@ -4,6 +4,7 @@ import { UsersProvider } from './context/UsersContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import {Toaster} from "react-hot-toast";
+import Register from "./pages/Register.jsx";
 
 const ProtectedRoute = ({ children }) => {
     const { user, loading } = useAuth();
@@ -20,7 +21,7 @@ function App() {
                     <Toaster position="top-center" />
                     <Routes>
                         <Route path="/login" element={<Login />} />
-                        <Route path="/register" element={<div>Register Page TODO</div>} />
+                        <Route path="/register" element={<Register />} />
                         <Route
                             path="/"
                             element={
