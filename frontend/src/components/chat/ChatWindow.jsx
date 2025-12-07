@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { toast } from 'react-hot-toast';
 import chatService from '../../services/chatService';
 import { useAuth } from '../../context/AuthContext';
 import { DELETED_USER } from '../../utils/constants';
@@ -101,7 +102,7 @@ const ChatWindow = ({ activeChat }) => {
             }
         } catch (error) {
             console.error("[ChatWindow] Failed to send message", error);
-            alert("Failed to send message.");
+            toast.error("Failed to send message ❌");
         }
     };
 
@@ -111,9 +112,11 @@ const ChatWindow = ({ activeChat }) => {
                 msg.id === messageId ? { ...msg, content: newContent } : msg
             ));
             await chatService.updateMessage(messageId, newContent);
+            toast.success("Message updated");
         } catch (error) {
             console.error("Failed to edit", error);
-            alert("Failed to save changes.");
+            toast.error("Failed to update message");
+            // Optional: Revert optimistic update here
         }
     };
 
@@ -123,7 +126,7 @@ const ChatWindow = ({ activeChat }) => {
             await chatService.deleteMessage(messageId);
         } catch (error) {
             console.error("Failed to delete", error);
-            alert("Failed to delete message.");
+            toast.error("Failed to delete message");
         }
     };
 
