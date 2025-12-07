@@ -18,25 +18,30 @@ export const UsersProvider = ({ children }) => {
             let addedCount = 0;
 
             usersArray.forEach(user => {
-                if (user && user.id && !newCache[user.id]) {
-                    newCache[user.id] = user;
-                    changed = true;
-                    addedCount++;
+                // Cache user if valid and not already cached (or if updated)
+                if (user && user.id) {
+                    // Simple check to see if we actually need to update the object ref
+                    // In a real app, you might do a deep comparison
+                    if (!prev[user.id] || prev[user.id].username !== user.username) {
+                        newCache[user.id] = user;
+                        changed = true;
+                        addedCount++;
+                    }
                 }
             });
 
             if (changed) {
-                console.log(`[UsersContext] Cached ${addedCount} new users. Total: ${Object.keys(newCache).length}`);
+                console.log(`[UsersContext] Cached ${addedCount} new/updated users.`);
             }
             return changed ? newCache : prev;
         });
     }, []);
 
     const getUser = useCallback((id) => {
-        const user = usersCache[id];
-        // LOGGING: Optional - uncomment if you suspect cache misses
-        // if (!user) console.warn(`[UsersContext] Cache MISS for ID: ${id}`);
-        return user || { username: 'Unknown', email: '' };
+        // Return null if not found.
+        // Do NOT return a dummy object like { username: 'Unknown' },
+        // because that breaks the "Deleted Account" detection logic in UI components.
+        return usersCache[id] || null;
     }, [usersCache]);
 
     return (

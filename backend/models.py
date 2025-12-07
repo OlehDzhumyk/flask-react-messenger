@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from extensions import db
 
 # Association table for Many-to-Many relationship between User and Chat.
-# As per requirements, this links users to their chats.
 user_chat_association = db.Table(
     'participants',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
@@ -22,15 +21,18 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
 
     # Relationships
-    # secondary indicates the association table used for the Many-to-Many link.
     chats = db.relationship(
         'Chat',
         secondary=user_chat_association,
         back_populates='participants'
     )
 
-    # One-to-Many: One user can write many messages
-    messages = db.relationship('Message', backref='author', lazy=True)
+    # One-to-Many: One user can write many messages.
+    messages = db.relationship(
+        'Message',
+        backref='author',
+        lazy=True
+    )
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -39,7 +41,6 @@ class User(db.Model):
 class Chat(db.Model):
     """
     Chat model representing a conversation room.
-    Supports 1-to-1 or Group chats via the participants relationship.
     """
     __tablename__ = 'chats'
 
@@ -53,7 +54,7 @@ class Chat(db.Model):
         back_populates='chats'
     )
 
-    # Cascade delete ensures messages are removed if the chat is deleted.
+    # Cascade delete here is fine: if the CHAT is deleted, messages should go.
     messages = db.relationship(
         'Message',
         backref='chat',
@@ -68,17 +69,16 @@ class Chat(db.Model):
 class Message(db.Model):
     """
     Message model for storing individual text messages.
-    Linked to both a specific Chat and a User (author).
     """
     __tablename__ = 'messages'
 
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)
-    # Using lambda to ensure timestamp is generated at insertion time
     timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Foreign Keys
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False)
 
     def to_dict(self):
