@@ -14,28 +14,27 @@ def get_auth_header(client, email, password):
 def test_search_users(client, app):
     """
     GIVEN registered users 'alice' and 'alex'
-    WHEN a user searches for 'al'
-    THEN both users should be returned.
+    WHEN a user searches
+    THEN partial matches should return nothing (security),
+    AND exact email matches should return the user.
     """
-    # 1. Setup
     client.post('/api/auth/register', json={'username': 'alice', 'email': 'alice@test.com', 'password': 'pw'})
     client.post('/api/auth/register', json={'username': 'alex', 'email': 'alex@test.com', 'password': 'pw'})
     client.post('/api/auth/register', json={'username': 'bob', 'email': 'bob@test.com', 'password': 'pw'})
 
-    # Login as bob to perform search
+    from tests.test_auth import get_auth_header # Ensure this helper is imported or available
     headers = get_auth_header(client, 'bob@test.com', 'pw')
 
-    # 2. Search for 'al'
-    response = client.get('/api/users?q=al', headers=headers)
+    response_partial = client.get('/api/users?q=al', headers=headers)
+    assert response_partial.status_code == 200
+    assert len(response_partial.json) == 0  # Should be empty now!
 
-    # 3. Assert
-    assert response.status_code == 200
-    data = response.json
-    assert len(data) == 2
-    usernames = [u['username'] for u in data]
-    assert 'alice' in usernames
-    assert 'alex' in usernames
-    assert 'bob' not in usernames
+    response_exact = client.get('/api/users?q=alice@test.com', headers=headers)
+    assert response_exact.status_code == 200
+    data = response_exact.json
+
+    assert len(data) == 1
+    assert data[0]['email'] == 'alice@test.com'
 
 
 def test_delete_account(client, app):

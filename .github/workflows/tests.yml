@@ -1,6 +1,5 @@
 name: Flask Tests
 
-# Trigger the workflow on push or pull request to main/develop branches
 on:
   push:
     branches: [ "main", "develop" ]
@@ -12,8 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      # GitHub Actions will spin up a Postgres container for us to test against.
-      # This mimics our docker-compose 'db' service.
       postgres:
         image: postgres:15-alpine
         env:
@@ -22,7 +19,6 @@ jobs:
           POSTGRES_DB: test_db
         ports:
           - 5432:5432
-        # Health check to ensure DB is ready before running tests
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -30,25 +26,29 @@ jobs:
           --health-retries 5
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.11"
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4 # Updated to v4
+        with:
+          python-version: "3.11"
+          cache: 'pip' # Enable caching for faster builds
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r backend/requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install backend dependencies
+          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+          # Ensure testing libraries are installed (even if missing from requirements.txt)
+          pip install pytest pytest-flask
 
-    - name: Run Tests
-      env:
-        # Configuration to connect to the service container defined above
-        # Note: In GitHub Actions, we connect to 'localhost', not 'db'
-        DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
-        JWT_SECRET_KEY: testing-secret
-        FLASK_APP: backend/app.py
-      run: |
-        cd backend
-        pytest
+      - name: Run Tests
+        env:
+          # Connection string for the service container
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
+          JWT_SECRET_KEY: testing-secret
+          FLASK_APP: backend/app.py
+          PYTHONPATH: backend # Add backend to python path to avoid import errors
+        run: |
+          cd backend
+          pytest -v # Verbose output to see which tests pass
