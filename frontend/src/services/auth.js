@@ -13,11 +13,22 @@ const authService = {
         return response.data;
     },
 
-    // Get current user profile (useful for re-auth on reload)
     getProfile: async () => {
         const response = await api.get('/profile');
         return response.data;
+    },
+
+    updateProfile: async (data) => {
+        // data: { username, email, password (optional) }
+        const response = await api.put('/profile', data);
+        return response.data;
+    },
+
+    deleteAccount: async () => {
+        const response = await api.delete('/profile');
+        return response.data;
     }
+
 };
 
 export default authService;
