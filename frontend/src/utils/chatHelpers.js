@@ -1,20 +1,15 @@
 /**
- * Helper to identify the chat partner (the user who is NOT the current user).
- * @param {Object} chat - The chat object from the API.
- * @param {Object} currentUser - The current authenticated user.
- * @returns {Object} The partner user object or a fallback.
+ * Helper to find the "other" user in a chat.
+ * @param {Object} chat - The chat object (normalized).
+ * @param {Object} currentUser - The currently logged-in user.
+ * @returns {Object} The partner user object or a placeholder.
  */
 export const getChatPartner = (chat, currentUser) => {
-    if (!chat || !chat.participants || !currentUser) {
-        return { id: 0, username: 'Unknown User', email: '' };
+    if (!chat || !chat.participants) {
+        return { id: 0, username: 'Unknown User' };
     }
 
-    // Convert to String to avoid type mismatch (1 vs "1")
-    const currentUserIdStr = String(currentUser.id);
+    const partner = chat.participants.find(p => p.id !== currentUser?.id);
 
-    const partner = chat.participants.find(
-        (p) => String(p.id) !== currentUserIdStr
-    );
-
-    return partner || { ...currentUser, username: 'Me (Saved Messages)' };
+    return partner || chat.participants[0] || { id: 0, username: 'Unknown' };
 };

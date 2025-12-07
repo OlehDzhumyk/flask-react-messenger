@@ -2,14 +2,13 @@ import { useState } from 'react';
 import MainLayout from '../components/layout/MainLayout';
 import Sidebar from '../components/layout/Sidebar';
 import ChatWindow from '../components/chat/ChatWindow';
-import ChatHeader from '../components/chat/ChatHeader'; // Import Header directly here
 import chatService from '../services/chatService';
 import { useUsers } from '../context/UsersContext';
 import { useAuth } from '../context/AuthContext';
 import { getChatPartner } from '../utils/chatHelpers';
 
 const Dashboard = () => {
-    // State now stores IDs, not full objects. Single source of truth is Context.
+    // State stores IDs. Single source of truth is Context.
     // Schema: { chatId: number, partnerId: number }
     const [activeChat, setActiveChat] = useState(null);
 
@@ -18,6 +17,7 @@ const Dashboard = () => {
 
     const handleChatSelect = (chat) => {
         const partner = getChatPartner(chat, currentUser);
+        // Ensure partner is cached so ChatHeader can find it by ID later
         cacheUsers([partner]);
 
         console.log('[Dashboard] Selected chat:', chat.id, 'Partner ID:', partner.id);
@@ -28,6 +28,7 @@ const Dashboard = () => {
         try {
             cacheUsers([targetUser]);
 
+            // Optimistic UI or wait for backend creation
             const chatData = await chatService.createChat(targetUser.id);
 
             if (!chatData || !chatData.id) return;
@@ -51,13 +52,16 @@ const Dashboard = () => {
         >
             {activeChat ? (
                 <div className="flex flex-col h-full w-full bg-white relative">
-
-                    <ChatHeader userId={activeChat.partnerId} />
-
                     <div className="flex-1 overflow-hidden relative h-full">
+                        {/* Refactoring: ChatWindow is now self-contained.
+                            We pass both chatId (for fetching messages) and partnerId (for the header).
+                        */}
                         <ChatWindow
                             key={activeChat.chatId}
-                            activeChat={{ id: activeChat.chatId }} // ChatWindow expects object with id
+                            activeChat={{
+                                id: activeChat.chatId,
+                                partnerId: activeChat.partnerId
+                            }}
                         />
                     </div>
                 </div>
