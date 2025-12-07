@@ -11,7 +11,8 @@ bp = Blueprint('users', __name__, url_prefix='/api')
 @jwt_required()
 def search_users():
     """
-    Search for users by username.
+    Search for a user by their exact email address.
+    Security update: Partial search disabled to prevent user enumeration.
     ---
     tags:
       - Users
@@ -22,10 +23,10 @@ def search_users():
         name: q
         type: string
         required: true
-        description: Partial username to search for
+        description: Exact email address to search for
     responses:
       200:
-        description: List of matching users
+        description: List containing the matching user (or empty)
         schema:
           type: array
           items:
@@ -41,15 +42,18 @@ def search_users():
     current_user_id = int(get_jwt_identity())
     query = request.args.get('q', '').strip()
 
-    if not query:
+    if not query or '@' not in query:
         return jsonify([]), 200
 
-    users = User.query.filter(
-        User.username.ilike(f'%{query}%'),
+    user = User.query.filter(
+        User.email == query,
         User.id != current_user_id
-    ).limit(20).all()
+    ).first()
 
-    results = [{'id': u.id, 'username': u.username, 'email': u.email} for u in users]
+    results = []
+    if user:
+        results.append({'id': user.id, 'username': user.username, 'email': user.email})
+
     return jsonify(results), 200
 
 

@@ -3,13 +3,12 @@ import * as Yup from 'yup';
 import { Link, useNavigate } from 'react-router-dom';
 import authService from '../services/auth';
 import { useAuth } from '../context/AuthContext';
-import { useState } from 'react';
-import {toast} from "react-hot-toast";
+import { toast } from "react-hot-toast";
 
 const Login = () => {
     const navigate = useNavigate();
     const { login } = useAuth();
-    const [error, setError] = useState(null);
+
 
     const formik = useFormik({
         initialValues: {
@@ -21,12 +20,16 @@ const Login = () => {
             password: Yup.string().required('Required'),
         }),
         onSubmit: async (values) => {
+            const loadingToast = toast.loading('Logging in...');
             try {
                 const data = await authService.login(values.email, values.password);
                 login(data.user, data.access_token);
-                toast.success(`Welcome back, ${data.user.username}!`); // Приємний бонус
+
+                toast.dismiss(loadingToast);
+                toast.success(`Welcome back, ${data.user.username}!`);
                 navigate('/');
             } catch (err) {
+                toast.dismiss(loadingToast);
                 const msg = err.response?.data?.message || 'Failed to login';
                 toast.error(msg);
             }
@@ -39,12 +42,6 @@ const Login = () => {
                 <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
                     Welcome Back
                 </h2>
-
-                {error && (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                        {error}
-                    </div>
-                )}
 
                 <form onSubmit={formik.handleSubmit} className="space-y-6">
                     <div>
@@ -90,16 +87,16 @@ const Login = () => {
                     <button
                         type="submit"
                         disabled={formik.isSubmitting}
-                        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50"
+                        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50 transition-colors"
                     >
-                        {formik.isSubmitting ? 'Signing in...' : 'Sign In'}
+                        {formik.isSubmitting ? 'Logging in...' : 'Log In'}
                     </button>
                 </form>
 
                 <div className="mt-4 text-center text-sm">
                     <p className="text-gray-600">
                         Don't have an account?{' '}
-                        <Link to="/register" className="text-blue-600 hover:text-blue-500">
+                        <Link to="/register" className="text-blue-600 hover:text-blue-500 font-medium">
                             Sign up
                         </Link>
                     </p>
