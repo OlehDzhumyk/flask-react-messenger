@@ -9,18 +9,25 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [loading, setLoading] = useState(true);
 
-    // Check if token exists on mount and restore session
     useEffect(() => {
         const initAuth = async () => {
+            // LOGGING: Check initialization start
+            console.log('[AuthContext] Initializing. Token exists:', !!token);
+
             if (token) {
                 try {
-                    // Verify token and get user data
                     const { data } = await api.get('/profile');
+                    // LOGGING: Profile loaded successfully
+                    console.log('[AuthContext] User loaded:', data);
                     setUser(data);
                 } catch (error) {
-                    console.error("Session expired", error);
-                    logout();
+                    console.error('[AuthContext] Session expired or invalid:', error);
+                    localStorage.removeItem('token');
+                    setToken(null);
+                    setUser(null);
                 }
+            } else {
+                console.log('[AuthContext] No token found.');
             }
             setLoading(false);
         };
@@ -29,12 +36,14 @@ export const AuthProvider = ({ children }) => {
     }, [token]);
 
     const login = (userData, accessToken) => {
+        console.log('[AuthContext] Login called for:', userData.username);
         localStorage.setItem('token', accessToken);
         setToken(accessToken);
         setUser(userData);
     };
 
     const logout = () => {
+        console.log('[AuthContext] Logout called');
         localStorage.removeItem('token');
         setToken(null);
         setUser(null);
@@ -51,7 +60,11 @@ AuthProvider.propTypes = {
     children: PropTypes.node.isRequired,
 };
 
-// Custom hook for easy access
 export const useAuth = () => {
-    return useContext(AuthContext);
+    const context = useContext(AuthContext);
+    // LOGGING: Check if hook is used outside provider
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
 };
