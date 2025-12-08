@@ -9,16 +9,14 @@ const ChatHeader = ({ userId }) => {
     const realUser = getUser(userId);
 
     // 2. Determine who to display
-    // Priority: Real User -> Deleted User Constant -> Loading/Null
     let displayUser = realUser;
 
-    // Check if it matches our "Deleted" flag ID (usually -1) or if ID exists but user not found
+    // Check if it matches our "Deleted" flag ID or if ID exists but user not found
     if (!realUser && (userId === DELETED_USER.id || userId > 0)) {
         displayUser = DELETED_USER;
     }
 
     // 3. Loading State
-    // If we have no user object yet, show Skeleton
     if (!displayUser) {
         return (
             <header className="bg-white border-b px-6 py-3 shadow-sm flex items-center gap-3 shrink-0 h-16 z-10">
@@ -31,9 +29,10 @@ const ChatHeader = ({ userId }) => {
     // 4. Extract visual data
     const isDeleted = displayUser.isDeleted;
     const username = displayUser.username || 'Unknown';
+    const email = displayUser.email || ''; // Get email
     const initial = username[0]?.toUpperCase() || '?';
 
-    // Dynamic styles based on state
+    // Dynamic styles
     const bgColor = isDeleted
         ? DELETED_USER.color
         : 'bg-gradient-to-r from-blue-500 to-indigo-600';
@@ -56,12 +55,10 @@ const ChatHeader = ({ userId }) => {
                     {username}
                 </h3>
 
-                {/* Status Indicator (Only for active users) */}
-                {!isDeleted && (
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                        <span className="text-xs text-gray-500 font-medium">Online</span>
-                    </div>
+                {!isDeleted && email && (
+                    <p className="text-xs text-gray-500 font-medium truncate max-w-[200px]">
+                        {email}
+                    </p>
                 )}
             </div>
         </header>
