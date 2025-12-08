@@ -1,78 +1,78 @@
 # Flask-React Messenger
 
-A secure, self-contained messaging platform designed as a microservices-based Single Page Application (SPA). This project focuses on data privacy, self-hosting capabilities, and a robust RESTful architecture.
+A secure, self-hosted messaging application built with a Python Flask backend and a React (Vite) frontend. Designed with privacy and data control alternatives in mind.
 
 
+## Features
 
-[Image of High Level Architecture Diagram]
+### Core Functionality
+* **Secure Authentication:** JWT-based login and registration with password hashing (SHA-256).
+* **1-to-1 Messaging:** Real-time feel using smart polling optimization (incremental fetching).
+* **Message History:** Persistent storage with PostgreSQL.
+* **Data Control:** Users have full ownership; Edit and Delete functionalities are native.
+* **Infinite Scroll:** Bi-directional pagination with scroll position restoration in the UI.
+* **GDPR Compliance:** "Right to be forgotten" – Complete account deletion cascades to all associated data while preserving chat integrity for partners.
 
+## Tech Stack
 
-## Project Overview
+### Backend (API)
+* **Framework:** Python 3.11 + Flask (Micro-framework architecture).
+* **Database:** PostgreSQL 15 (Relational Data Persistence).
+* **ORM:** SQLAlchemy (Models & Relationships).
+* **Auth:** Flask-JWT-Extended (Stateless authentication).
+* **Documentation:** Flasgger (Swagger UI).
 
-This application serves as a viable alternative for users requiring a simple, direct messaging service without sacrificing control over their personal information. It implements a clean separation of concerns between the API backend and the client-side frontend.
+### Frontend (UI)
+* **Framework:** React 18 + Vite (SPA).
+* **Styling:** Tailwind CSS (Utility-first).
+* **State Management:** React Context API (Auth & Users caching).
+* **HTTP Client:** Axios with Interceptors.
 
-### Key Features (MVP)
-* **Secure Authentication:** User registration and login flows using JWT (JSON Web Tokens).
-* **1-to-1 Messaging:** Private conversation initialization and message history persistence.
-* **Message Control:** Users can edit and delete their own messages (CRUD).
-* **User Discovery:** Search functionality to find other users on the platform.
-* **Data Privacy:** GDPR-compliant account deletion ("Right to be Forgotten").
-* **API Documentation:** Automated Swagger UI documentation.
-* **Containerization:** Fully orchestrated environment using Docker Compose.
+### Infrastructure
+* **Containerization:** Docker & Docker Compose (Orchestration of DB, Backend, Frontend).
+* **CI/CD:** GitHub Actions (Automated testing pipeline).
 
-## Technology Stack
+## API Overview
 
-* **Backend:** Python 3.11, Flask, SQLAlchemy (ORM), Flask-Migrate, Flask-JWT-Extended.
-* **Database:** PostgreSQL 15.
-* **Testing:** Pytest (Unit & Integration tests).
-* **Infrastructure:** Docker, Docker Compose, GitHub Actions (CI).
+The backend provides a RESTful API structure:
 
-## Getting Started
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/auth/register` | Create new account |
+| `POST` | `/api/auth/login` | Authenticate & receive JWT |
+| `GET` | `/api/users` | Search users by exact email (Security: No Enumeration) |
+| `GET` | `/api/chats` | List all active conversations |
+| `GET` | `/api/chats/<id>/messages` | Fetch history (supports `limit`, `before_id`, `after_id`) |
+| `DELETE`| `/api/profile` | Delete account (GDPR) |
 
-### Prerequisites
-* Docker and Docker Compose installed on your machine.
-* Git.
+## Database Schema
 
-### Installation & Execution
+The application uses a normalized relational schema:
+* **Users:** Stores credentials and profile data.
+* **Chats:** Manages conversation sessions.
+* **Participants:** Association table (Many-to-Many) linking Users to Chats.
+* **Messages:** Stores content, timestamps, and foreign keys to User/Chat.
 
-1.  **Clone the repository:**
+## How to Run
+
+1.  **Prerequisites:** Ensure you have Docker and Docker Compose installed.
+2.  **Start the Application:**
     ```bash
-    git clone <repository-url>
-    cd flask-react-messenger
+    docker-compose up --build
     ```
-
-2.  **Environment Configuration:**
-    Create a `.env` file in the root directory based on the example:
-    ```bash
-    cp .env.example .env
-    ```
-
-3.  **Build and Run:**
-    Start the services in detached mode:
-    ```bash
-    docker-compose up -d --build
-    ```
-
-4.  **Database Seeding (Optional):**
-    Populate the database with sample users (Alice, Bob, Charlie) and conversations:
+3.  **Seed the Database (First Run Only):**
+    Open a new terminal to populate the DB with test users and messages:
     ```bash
     docker-compose exec backend flask seed_db
     ```
+4.  **Access the App:**
+    * **Frontend:** `http://localhost:3000`
+    * **API Documentation (Swagger):** `http://localhost:5000/apidocs`
 
-The API will be available at `http://localhost:5000`.
+## Default Users (from Seed)
 
-## Documentation & API
+Password for all users is: `password`
 
-The project includes auto-generated interactive API documentation via Swagger UI.
-
-* **API Docs:** [http://localhost:5000/apidocs/](http://localhost:5000/apidocs/)
-* **Design Document:** See `docs/API_DESIGN.md` for the initial architectural vision.
-
-## Development & Testing
-
-### Running Tests
-The project maintains a comprehensive test suite covering authentication, messaging logic, error handling, and security scenarios.
-
-To run tests inside the container:
-```bash
-docker-compose exec backend pytest
+* `alice@test.com`
+* `bob@test.com`
+* `charlie@test.com`

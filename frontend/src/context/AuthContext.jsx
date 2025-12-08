@@ -9,17 +9,17 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [loading, setLoading] = useState(true);
 
-    // Check if token exists on mount and restore session
     useEffect(() => {
         const initAuth = async () => {
             if (token) {
                 try {
-                    // Verify token and get user data
                     const { data } = await api.get('/profile');
                     setUser(data);
                 } catch (error) {
-                    console.error("Session expired", error);
-                    logout();
+                    console.error('Session expired or invalid:', error);
+                    localStorage.removeItem('token');
+                    setToken(null);
+                    setUser(null);
                 }
             }
             setLoading(false);
@@ -51,7 +51,10 @@ AuthProvider.propTypes = {
     children: PropTypes.node.isRequired,
 };
 
-// Custom hook for easy access
 export const useAuth = () => {
-    return useContext(AuthContext);
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
 };
