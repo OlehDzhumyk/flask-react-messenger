@@ -11,23 +11,16 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const initAuth = async () => {
-            // LOGGING: Check initialization start
-            console.log('[AuthContext] Initializing. Token exists:', !!token);
-
             if (token) {
                 try {
                     const { data } = await api.get('/profile');
-                    // LOGGING: Profile loaded successfully
-                    console.log('[AuthContext] User loaded:', data);
                     setUser(data);
                 } catch (error) {
-                    console.error('[AuthContext] Session expired or invalid:', error);
+                    console.error('Session expired or invalid:', error);
                     localStorage.removeItem('token');
                     setToken(null);
                     setUser(null);
                 }
-            } else {
-                console.log('[AuthContext] No token found.');
             }
             setLoading(false);
         };
@@ -36,14 +29,12 @@ export const AuthProvider = ({ children }) => {
     }, [token]);
 
     const login = (userData, accessToken) => {
-        console.log('[AuthContext] Login called for:', userData.username);
         localStorage.setItem('token', accessToken);
         setToken(accessToken);
         setUser(userData);
     };
 
     const logout = () => {
-        console.log('[AuthContext] Logout called');
         localStorage.removeItem('token');
         setToken(null);
         setUser(null);
@@ -62,7 +53,6 @@ AuthProvider.propTypes = {
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    // LOGGING: Check if hook is used outside provider
     if (context === undefined) {
         throw new Error('useAuth must be used within an AuthProvider');
     }

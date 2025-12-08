@@ -1,6 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
+    // Using relative path allows Nginx/Docker proxying to work correctly in production
+    // or falls back to localhost if configured in vite proxy
     baseURL: 'http://localhost:5000/api',
     headers: {
         'Content-Type': 'application/json',
@@ -24,16 +26,9 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && error.response.status === 401) {
-            console.warn('[API] Unauthorized! Redirecting to login...');
-
-            // Clear storage
+            // Auto-logout if token is invalid
             localStorage.removeItem('token');
-            localStorage.removeItem('user');
-
-            // Force reload to trigger AuthContext reset or redirect via Router
-            // In a pure React Router setup, we might use a custom event or history object,
-            // but window.location is the safest "hard" logout.
-            if (window.location.pathname !== '/login') {
+            if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
                 window.location.href = '/login';
             }
         }
