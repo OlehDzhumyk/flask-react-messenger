@@ -59,7 +59,7 @@ def get_chats():
 @jwt_required()
 def create_chat():
     """
-    Create a new 1-to-1 chat.
+    Create a new 1-to-1 chat or return existing one.
     ---
     tags:
       - Chats
@@ -78,6 +78,8 @@ def create_chat():
               type: integer
               example: 2
     responses:
+      200:
+        description: Chat already exists (returns existing ID)
       201:
         description: Chat created
       400:
@@ -101,7 +103,23 @@ def create_chat():
 
     current_user = db.session.get(User, current_user_id)
 
-    # Note: In a real app, check if chat already exists here.
+    # --- LOGIC TO PREVENT DUPLICATES ---
+    existing_chat = None
+
+    for chat in current_user.chats:
+        if len(chat.participants) == 2:
+            participant_ids = [p.id for p in chat.participants]
+            if recipient.id in participant_ids:
+                existing_chat = chat
+                break
+
+    if existing_chat:
+        return jsonify({
+            'message': 'Chat already exists',
+            'chat_id': existing_chat.id
+        }), 200
+    # -----------------------------------
+
     new_chat = Chat()
     new_chat.participants.append(current_user)
     new_chat.participants.append(recipient)
@@ -185,41 +203,23 @@ def send_message(chat_id):
 @jwt_required()
 def get_messages(chat_id):
     """
-    Retrieve message history for a specific chat.
-    Query Params:
-      - limit: int (default 50) - Max messages to return
-      - after_id: int (optional) - Return only messages after this ID (for polling)
+    Retrieve message history with pagination.
+    Params:
+      - limit: int (default 50)
+      - after_id: int (optional) - For polling (newer than X)
+      - before_id: int (optional) - For pagination (older than X)
     ---
     tags:
       - Messages
     security:
       - Bearer: []
-    parameters:
-      - in: path
-        name: chat_id
-        type: integer
-        required: true
-      - in: query
-        name: limit
-        type: integer
-        description: Limit number of messages
-      - in: query
-        name: after_id
-        type: integer
-        description: Get messages created after this ID
-    responses:
-      200:
-        description: List of messages
-      403:
-        description: Access denied
-      404:
-        description: Chat not found
     """
     current_user_id = int(get_jwt_identity())
 
     # Get query params
     limit = request.args.get('limit', 50, type=int)
     after_id = request.args.get('after_id', type=int)
+    before_id = request.args.get('before_id', type=int) # 👈 ADDED BACK
 
     chat = db.session.get(Chat, chat_id)
     if not chat:
@@ -233,16 +233,19 @@ def get_messages(chat_id):
     query = Message.query.filter_by(chat_id=chat_id)
 
     if after_id:
-        # Polling Mode: Get everything new
+        # Polling: Get NEWER messages
         query = query.filter(Message.id > after_id).order_by(Message.timestamp.asc())
+    elif before_id:
+        # Pagination: Get OLDER messages (History)
+        # 👈 ADDED BACK: Logic to fetch messages OLDER than before_id
+        query = query.filter(Message.id < before_id).order_by(Message.timestamp.desc()).limit(limit)
     else:
-        # Initial Load: Get latest N messages
-        # We order by desc to get latest, then reverse in python to show chronologically
+        # Initial Load: Get latest messages
         query = query.order_by(Message.timestamp.desc()).limit(limit)
 
     messages = query.all()
 
-    # If we fetched by DESC (limit), we need to reverse list to show oldest->newest
+    # If we fetched by DESC (Initial load OR Pagination), reverse to show chronological order
     if not after_id:
         messages = messages[::-1]
 
@@ -256,34 +259,6 @@ def get_messages(chat_id):
 def edit_message(message_id):
     """
     Edit a specific message.
-    ---
-    tags:
-      - Messages
-    security:
-      - Bearer: []
-    parameters:
-      - in: path
-        name: message_id
-        type: integer
-        required: true
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - content
-          properties:
-            content:
-              type: string
-              example: Updated text
-    responses:
-      200:
-        description: Message updated
-      403:
-        description: Access denied (not author)
-      404:
-        description: Message not found
     """
     current_user_id = int(get_jwt_identity())
     data = request.get_json()
@@ -315,23 +290,6 @@ def edit_message(message_id):
 def delete_message(message_id):
     """
     Delete a specific message.
-    ---
-    tags:
-      - Messages
-    security:
-      - Bearer: []
-    parameters:
-      - in: path
-        name: message_id
-        type: integer
-        required: true
-    responses:
-      200:
-        description: Message deleted
-      403:
-        description: Access denied (not author)
-      404:
-        description: Message not found
     """
     current_user_id = int(get_jwt_identity())
 

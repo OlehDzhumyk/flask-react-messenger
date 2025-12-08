@@ -1,54 +1,75 @@
 import { useState } from 'react';
 import MainLayout from '../components/layout/MainLayout';
 import Sidebar from '../components/layout/Sidebar';
+import ChatWindow from '../components/chat/ChatWindow';
 import chatService from '../services/chatService';
+import { useUsers } from '../context/UsersContext';
+import { useAuth } from '../context/AuthContext';
+import { getChatPartner } from '../utils/chatHelpers';
 
 const Dashboard = () => {
+    // State stores IDs. Single source of truth is Context.
+    // Schema: { chatId: number, partnerId: number }
     const [activeChat, setActiveChat] = useState(null);
 
-    const handleSelectChat = async (id, type) => {
+    const { cacheUsers } = useUsers();
+    const { user: currentUser } = useAuth();
+
+    const handleChatSelect = (chat) => {
+        const partner = getChatPartner(chat, currentUser);
+        // Ensure partner is cached so ChatHeader can find it by ID later
+        cacheUsers([partner]);
+
+        console.log('[Dashboard] Selected chat:', chat.id, 'Partner ID:', partner.id);
+        setActiveChat({ chatId: chat.id, partnerId: partner.id });
+    };
+
+    const handleUserSelect = async (targetUser) => {
         try {
-            let chatData;
+            cacheUsers([targetUser]);
 
-            if (type === 'user') {
-                // Create new chat or get existing one by recipient ID
-                chatData = await chatService.createChat(id);
-            } else {
-                // ID is already a chat ID (we will fetch details/messages later)
-                // For now, we simulate the chat object structure if simpler
-                // Ideally, we might need a getChatById, but usually createChat handles both.
-                // Let's rely on the fact we probably have the chat object in Sidebar,
-                // but for now, let's treat it simple:
-                // Since we don't have getChatById yet, we'll assume we reload messages
-                chatData = { id: id };
-            }
+            // Optimistic UI or wait for backend creation
+            const chatData = await chatService.createChat(targetUser.id);
 
-            setActiveChat(chatData);
-            console.log("Active Chat Set:", chatData);
+            if (!chatData || !chatData.id) return;
+
+            console.log('[Dashboard] Created/Found chat:', chatData.id, 'Partner ID:', targetUser.id);
+            setActiveChat({
+                chatId: chatData.id,
+                partnerId: targetUser.id
+            });
+
         } catch (error) {
-            console.error("Failed to select chat", error);
+            console.error('[Dashboard] Failed to init chat', error);
         }
     };
 
     return (
         <MainLayout
-            sidebar={<Sidebar onSelectChat={handleSelectChat} />}
+            sidebar={
+                <Sidebar onChatSelect={handleChatSelect} onUserSelect={handleUserSelect} />
+            }
         >
             {activeChat ? (
-                <div className="flex-1 flex flex-col bg-gray-50 h-full">
-                    <header className="bg-white border-b p-4 shadow-sm">
-                        <h3 className="font-bold text-gray-800">Chat #{activeChat.id}</h3>
-                    </header>
-
-                    <div className="flex-1 p-4 flex items-center justify-center text-gray-400">
-                        Messages loading logic goes here...
+                <div className="flex flex-col h-full w-full bg-white relative">
+                    <div className="flex-1 overflow-hidden relative h-full">
+                        {/* Refactoring: ChatWindow is now self-contained.
+                            We pass both chatId (for fetching messages) and partnerId (for the header).
+                        */}
+                        <ChatWindow
+                            key={activeChat.chatId}
+                            activeChat={{
+                                id: activeChat.chatId,
+                                partnerId: activeChat.partnerId
+                            }}
+                        />
                     </div>
                 </div>
             ) : (
                 <div className="flex-1 flex items-center justify-center bg-gray-50 text-gray-400 select-none">
                     <div className="text-center">
                         <span className="text-6xl">💬</span>
-                        <p className="mt-4 text-lg">Select a chat to start messaging</p>
+                        <p className="mt-4 text-lg">Select a conversation to start</p>
                     </div>
                 </div>
             )}

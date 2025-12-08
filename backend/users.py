@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy.exc import IntegrityError
 from extensions import db
 from models import User
 
@@ -10,7 +11,8 @@ bp = Blueprint('users', __name__, url_prefix='/api')
 @jwt_required()
 def search_users():
     """
-    Search for users by username.
+    Search for a user by their exact email address.
+    Security update: Partial search disabled to prevent user enumeration.
     ---
     tags:
       - Users
@@ -21,10 +23,10 @@ def search_users():
         name: q
         type: string
         required: true
-        description: Partial username to search for
+        description: Exact email address to search for
     responses:
       200:
-        description: List of matching users
+        description: List containing the matching user (or empty)
         schema:
           type: array
           items:
@@ -40,15 +42,20 @@ def search_users():
     current_user_id = int(get_jwt_identity())
     query = request.args.get('q', '').strip()
 
-    if not query:
+    # Basic validation: ensure query looks like an email to avoid unnecessary DB calls
+    if not query or '@' not in query:
         return jsonify([]), 200
 
-    users = User.query.filter(
-        User.username.ilike(f'%{query}%'),
+    # Strict filter: Email must match exactly, and exclude self
+    user = User.query.filter(
+        User.email == query,
         User.id != current_user_id
-    ).limit(20).all()
+    ).first()
 
-    results = [{'id': u.id, 'username': u.username, 'email': u.email} for u in users]
+    results = []
+    if user:
+        results.append({'id': user.id, 'username': user.username, 'email': user.email})
+
     return jsonify(results), 200
 
 
@@ -79,6 +86,8 @@ def delete_profile():
         db.session.commit()
     except Exception as e:
         db.session.rollback()
+        # It is good practice to log the error here
+        print(f"Error deleting user: {e}")
         return jsonify({'error': 'Failed to delete account'}), 500
 
     return jsonify({'message': 'Account deleted successfully'}), 200
@@ -117,4 +126,71 @@ def get_profile():
         'id': user.id,
         'username': user.username,
         'email': user.email
+    }), 200
+
+
+@bp.route('/profile', methods=['PUT'])
+@jwt_required()
+def update_profile():
+    """
+    Update the current user's profile information.
+    ---
+    tags:
+      - Users
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+            email:
+              type: string
+    responses:
+      200:
+        description: Profile updated successfully
+      400:
+        description: Invalid input or username/email already taken
+      404:
+        description: User not found
+    """
+    current_user_id = int(get_jwt_identity())
+    user = db.session.get(User, current_user_id)
+
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.get_json()
+
+    # Update fields if provided
+    new_username = data.get('username')
+    new_email = data.get('email')
+
+    if new_username:
+        user.username = new_username.strip()
+
+    if new_email:
+        user.email = new_email.strip()
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Username or Email already exists'}), 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating profile: {e}")
+        return jsonify({'error': 'Failed to update profile'}), 500
+
+    return jsonify({
+        'message': 'Profile updated successfully',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email
+        }
     }), 200
