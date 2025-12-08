@@ -6,55 +6,57 @@ const MessageList = ({
                          messages,
                          currentUser,
                          loading,
+                         isFetchingOld,
                          onEditMessage,
                          onDeleteMessage,
-                         onLoadMore, // 👈 New Prop: function to load history
-                         hasMore     // 👈 New Prop: boolean, are there more messages?
+                         onLoadMore,
+                         hasMore
                      }) => {
     const listRef = useRef(null);
-    const prevHeightRef = useRef(0);
-    const prevMessageCountRef = useRef(0);
 
-    // 1. Scroll Management: Preserve position when old messages are loaded
+    const snapshotHeightRef = useRef(0);
+    const snapshotScrollTopRef = useRef(0);
+
+    const prevMessagesLengthRef = useRef(messages.length);
+    const prevFirstMessageIdRef = useRef(null);
+
+    // 1. Scroll Restoration Logic
     useLayoutEffect(() => {
         const list = listRef.current;
         if (!list) return;
 
-        // If we added messages to the TOP (pagination)
-        if (messages.length > prevMessageCountRef.current && list.scrollTop === 0) {
-            const newHeight = list.scrollHeight;
-            const heightDifference = newHeight - prevHeightRef.current;
+        const currentLength = messages.length;
+        const prevLength = prevMessagesLengthRef.current;
+        const firstMessageId = messages.length > 0 ? messages[0].id : null;
 
-            // Restore scroll position so user doesn't jump to top
-            list.scrollTop = heightDifference;
+        if (currentLength > prevLength && firstMessageId !== prevFirstMessageIdRef.current) {
+            const newScrollHeight = list.scrollHeight;
+            const heightDifference = newScrollHeight - snapshotHeightRef.current;
+
+            list.scrollTop = heightDifference + snapshotScrollTopRef.current;
         }
-        // If we added messages to the BOTTOM (new message sent/received), auto-scroll down
-        else if (messages.length > prevMessageCountRef.current) {
-            // Only auto-scroll if user was already near bottom
-            const isNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 100;
-            if (isNearBottom) {
+
+        else if (currentLength > prevLength) {
+            const isUserNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 150;
+            if (isUserNearBottom || prevLength === 0) {
                 list.scrollTop = list.scrollHeight;
             }
         }
 
-        // Update refs for next render
-        prevHeightRef.current = list.scrollHeight;
-        prevMessageCountRef.current = messages.length;
+        prevMessagesLengthRef.current = currentLength;
+        prevFirstMessageIdRef.current = firstMessageId;
     }, [messages]);
 
-    // 2. Initial auto-scroll to bottom on first load
-    useEffect(() => {
-        if (!loading && listRef.current && messages.length > 0 && prevMessageCountRef.current === 0) {
-            listRef.current.scrollTop = listRef.current.scrollHeight;
-        }
-    }, [loading, messages]); // Runs only when loading finishes
-
-    // 3. Handle Scroll to Top
+    // 2. Scroll Handler
     const handleScroll = (e) => {
-        const { scrollTop } = e.target;
-        if (scrollTop === 0 && hasMore && !loading) {
-            // Save current height before fetching new data
-            prevHeightRef.current = e.target.scrollHeight;
+        if (isFetchingOld || !hasMore || loading) return;
+
+        const { scrollTop, scrollHeight } = e.target;
+
+        if (scrollTop < 100) {
+            snapshotHeightRef.current = scrollHeight;
+            snapshotScrollTopRef.current = scrollTop;
+
             onLoadMore();
         }
     };
@@ -72,11 +74,11 @@ const MessageList = ({
             ref={listRef}
             onScroll={handleScroll}
             className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-2 relative"
+            style={{ overflowAnchor: 'none' }}
         >
-            {/* Loading Indicator for Pagination */}
-            {loading && messages.length > 0 && (
-                <div className="text-center py-2 text-xs text-gray-400">
-                    Loading history...
+            {isFetchingOld && (
+                <div className="flex justify-center py-2 h-8 overflow-hidden">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
                 </div>
             )}
 
@@ -114,6 +116,7 @@ MessageList.propTypes = {
     messages: PropTypes.array.isRequired,
     currentUser: PropTypes.object,
     loading: PropTypes.bool,
+    isFetchingOld: PropTypes.bool,
     onEditMessage: PropTypes.func.isRequired,
     onDeleteMessage: PropTypes.func.isRequired,
     onLoadMore: PropTypes.func,
