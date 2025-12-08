@@ -42,9 +42,11 @@ def search_users():
     current_user_id = int(get_jwt_identity())
     query = request.args.get('q', '').strip()
 
+    # Basic validation: ensure query looks like an email to avoid unnecessary DB calls
     if not query or '@' not in query:
         return jsonify([]), 200
 
+    # Strict filter: Email must match exactly, and exclude self
     user = User.query.filter(
         User.email == query,
         User.id != current_user_id
