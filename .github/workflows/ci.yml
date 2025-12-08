@@ -1,4 +1,4 @@
-name: Flask Tests
+name: CI Pipeline
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 
 jobs:
   test:
+    name: Run Backend Tests
     runs-on: ubuntu-latest
 
     services:
@@ -29,26 +30,24 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v4 # Updated to v4
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-          cache: 'pip' # Enable caching for faster builds
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install backend dependencies
           if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
-          # Ensure testing libraries are installed (even if missing from requirements.txt)
+          # Install testing tools explicitly
           pip install pytest pytest-flask
 
       - name: Run Tests
         env:
-          # Connection string for the service container
           DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
           JWT_SECRET_KEY: testing-secret
           FLASK_APP: backend/app.py
-          PYTHONPATH: backend # Add backend to python path to avoid import errors
+          PYTHONPATH: backend
         run: |
           cd backend
-          pytest -v # Verbose output to see which tests pass
+          pytest -v

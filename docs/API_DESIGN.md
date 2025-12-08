@@ -1,6 +1,6 @@
 # API Design Specification
 
-This document outlines the RESTful API endpoints and the WebSocket events strategy.
+This document outlines the RESTful API endpoints and the architecture strategy.
 All REST endpoints are prefixed with `/api`.
 
 ## 1. Authentication
@@ -14,7 +14,7 @@ All REST endpoints are prefixed with `/api`.
 
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/users` | List all users (for discovery). | Yes (JWT) |
+| `GET` | `/users` | Search users by **exact email** (param: `?q=email`). | Yes (JWT) |
 | `GET` | `/profile` | Get current user's details. | Yes (JWT) |
 | `PUT` | `/profile` | Update profile info. | Yes (JWT) |
 | `DELETE` | `/profile` | Delete account and all data (GDPR). | Yes (JWT) |
@@ -24,26 +24,21 @@ All REST endpoints are prefixed with `/api`.
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/chats` | Get list of active conversations. | Yes (JWT) |
-| `POST` | `/chats` | Create a new chat with another user. | Yes (JWT) |
+| `POST` | `/chats` | Create a new chat or return existing one. | Yes (JWT) |
 
 ## 4. Messages
 
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/chats/<id>/messages` | Get message history for a chat. | Yes (JWT) |
+| `GET` | `/chats/<id>/messages` | Get history. Supports `limit`, `before_id` (pagination), `after_id` (polling). | Yes (JWT) |
 | `POST` | `/chats/<id>/messages` | Send a new message. | Yes (JWT) |
 | `PUT` | `/messages/<id>` | Edit a message. | Yes (JWT) |
 | `DELETE` | `/messages/<id>` | Delete a message. | Yes (JWT) |
 
 ---
 
-## 5. WebSocket Strategy (Future Implementation)
+## 5. Real-Time Strategy
 
-The system uses a "Hybrid" approach.
-- **REST** is used for persistence and history.
-- **Socket.IO** is used for real-time events.
+The system currently uses **Smart Polling** (incremental fetching via `after_id`) to simulate real-time updates while maintaining stateless REST architecture.
 
-### Events
-- `connect`: Client connects with JWT.
-- `new_message`: Server broadcasts this event to participants when a POST is made to `/messages`.
-- `typing`: Client emits when typing; Server broadcasts to chat participants.
+*Future Implementation:* Migration to WebSocket (Socket.IO) for `new_message` and `typing` events.

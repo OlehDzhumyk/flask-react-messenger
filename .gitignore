@@ -1,13 +1,26 @@
+# Python
 venv/
 __pycache__/
 *.pyc
-.env
 .pytest_cache/
 .coverage
 htmlcov/
+instance/
+
+# Node / Frontend
+node_modules/
 dist/
 build/
+.npm
+.eslintcache
+
+# Environment Variables (Security)
+.env
+
+# IDEs
 .DS_Store
 .idea/
 .vscode/
+
+# Docker Data
 postgres_data/
