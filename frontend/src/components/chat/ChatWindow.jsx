@@ -14,6 +14,10 @@ const ChatWindow = ({ activeChat }) => {
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // --- Pagination State ---
+    const [isFetchingOld, setIsFetchingOld] = useState(false); // Loader for history
+    const [hasMore, setHasMore] = useState(true); // Is there more history to load?
+
     // Ref to track the ID of the last message we received (Smart Polling)
     const lastIdRef = useRef(0);
 
@@ -36,6 +40,7 @@ const ChatWindow = ({ activeChat }) => {
         // Reset state for new chat
         setLoading(true);
         setMessages([]);
+        setHasMore(true); // Assume there is history initially
         lastIdRef.current = 0;
 
         // 1. Initial Fetch
@@ -46,6 +51,11 @@ const ChatWindow = ({ activeChat }) => {
                 if (isMounted) {
                     const msgs = Array.isArray(data) ? data : [];
                     setMessages(msgs);
+
+                    // If we received fewer messages than the limit, we reached the start
+                    if (msgs.length < 50) {
+                        setHasMore(false);
+                    }
 
                     if (msgs.length > 0) {
                         lastIdRef.current = msgs[msgs.length - 1].id;
@@ -89,6 +99,38 @@ const ChatWindow = ({ activeChat }) => {
         };
     }, [chatId]);
 
+    // --- Pagination Handler ---
+    const handleLoadOlderMessages = async () => {
+        // Stop if already loading, no more messages, or chat is empty
+        if (!hasMore || isFetchingOld || messages.length === 0) return;
+
+        setIsFetchingOld(true);
+
+        try {
+            // The oldest message is the first one in the current array
+            const oldestId = messages[0].id;
+
+            const olderMsgs = await chatService.getMessages(chatId, {
+                limit: 50,
+                before_id: oldestId
+            });
+
+            if (olderMsgs.length < 50) {
+                setHasMore(false); // We reached the beginning
+            }
+
+            if (olderMsgs.length > 0) {
+                // Prepend older messages to the list
+                setMessages(prev => [...olderMsgs, ...prev]);
+            }
+        } catch (error) {
+            console.error("Failed to load history", error);
+            toast.error("Could not load history");
+        } finally {
+            setIsFetchingOld(false);
+        }
+    };
+
     // --- Handlers ---
 
     const handleSendMessage = async (content) => {
@@ -116,7 +158,6 @@ const ChatWindow = ({ activeChat }) => {
         } catch (error) {
             console.error("Failed to edit", error);
             toast.error("Failed to update message");
-            // Optional: Revert optimistic update here
         }
     };
 
@@ -142,6 +183,8 @@ const ChatWindow = ({ activeChat }) => {
                 loading={loading}
                 onEditMessage={handleEditMessage}
                 onDeleteMessage={handleDeleteMessage}
+                onLoadMore={handleLoadOlderMessages}
+                hasMore={hasMore}
             />
 
             <MessageInput
