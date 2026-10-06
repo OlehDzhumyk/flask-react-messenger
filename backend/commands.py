@@ -64,13 +64,18 @@ def seed_db_command():
     now = datetime.now(timezone.utc)
     messages = []
 
-    # A long conversation between Alice and Bob over the last two days
-    chat_with_bob = Chat(participants=[alice, bob], created_at=now - timedelta(days=2))
+    # A long conversation between Alice and Bob, ending 20 minutes ago
+    gaps = [timedelta(minutes=rng.randint(5, 25)) for _ in range(100)]
+    chat_with_bob = Chat(participants=[alice, bob],
+                         created_at=now - timedelta(minutes=20) - sum(gaps, timedelta()))
     sent_at = chat_with_bob.created_at
-    for _ in range(100):
-        sent_at += timedelta(minutes=rng.randint(5, 25))
+    previous_text = None
+    for gap in gaps:
+        sent_at += gap
         author = rng.choice([alice, bob])
-        messages.append(Message(content=rng.choice(LONG_CONVERSATION), author=author,
+        text = rng.choice([t for t in LONG_CONVERSATION if t != previous_text])
+        previous_text = text
+        messages.append(Message(content=text, author=author,
                                 chat=chat_with_bob, timestamp=sent_at))
 
     # Short conversations, each finishing a bit earlier than the previous one
