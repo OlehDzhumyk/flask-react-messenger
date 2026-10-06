@@ -1,79 +1,116 @@
-import json
-from app import db
+import pytest
+
 from models import User
 
-
-def test_register_user(client, app):
-    """
-    GIVEN a running app
-    WHEN a valid POST request is made to /api/auth/register
-    THEN a new user should be created in the database and 201 returned.
-    """
-    # Define the payload
-    data = {
-        "username": "newuser",
-        "email": "new@example.com",
-        "password": "securepassword123"
-    }
-
-    # Make the request
-    response = client.post(
-        '/api/auth/register',
-        data=json.dumps(data),
-        content_type='application/json'
-    )
-
-    # Check the response status code
-    assert response.status_code == 201
-
-    # Check the response body
-    assert response.json["message"] == "User created successfully"
-
-    # Verify user exists in the database context
-    with app.app_context():
-        user = User.query.filter_by(email="new@example.com").first()
-        assert user is not None
-        assert user.username == "newuser"
-        # Ensure password is NOT stored in plain text
-        assert user.password_hash != "securepassword123"
+REGISTER = '/api/auth/register'
+LOGIN = '/api/auth/login'
 
 
-def test_register_existing_user(client):
-    """
-    GIVEN an existing user in the database
-    WHEN a POST request is made to /api/auth/register with the same email
-    THEN the API should return 409 Conflict.
-    """
-    # First, create a user directly in the DB (setup phase)
-    # We use the client to do this via API for simplicity,
-    # or we could insert directly via db.session if we wanted pure unit isolation.
-    data = {
-        "username": "existing",
-        "email": "existing@example.com",
-        "password": "password"
-    }
-    client.post('/api/auth/register', json=data)
-
-    # Try to register again with same email
-    response = client.post('/api/auth/register', json=data)
-
-    assert response.status_code == 409
-    assert "User already exists" in response.json["error"]
+def new_user(**overrides):
+    return {'username': 'newuser', 'email': 'new@example.com', 'password': 'secret123', **overrides}
 
 
-def test_register_validation(client):
-    """
-    GIVEN a registration payload missing a required field (password)
-    WHEN the request is sent
-    THEN the API should return 400 Bad Request with an appropriate error message.
-    """
-    data = {
-        "username": "incomplete",
-        "email": "incomplete@example.com"
-        # Missing password
-    }
+# --- Registration ---
 
-    response = client.post('/api/auth/register', json=data)
+def test_register_stores_hashed_password(client, app):
+    res = client.post(REGISTER, json=new_user())
 
-    assert response.status_code == 400
-    assert "Username, email, and password are required" in response.json["error"]
+    assert res.status_code == 201
+    assert res.json['message'] == 'User created successfully'
+    user = User.query.filter_by(email='new@example.com').one()
+    assert user.username == 'newuser'
+    assert user.password_hash != 'secret123'
+    assert user.password_hash.startswith('scrypt:')
+
+
+def test_register_normalises_email(client):
+    client.post(REGISTER, json=new_user(email='  New@Example.COM '))
+
+    assert User.query.one().email == 'new@example.com'
+
+
+@pytest.mark.parametrize('duplicate', [
+    {'username': 'other'},                                   # same email
+    {'username': 'other', 'email': 'NEW@example.com'},       # same email, different case
+    {'email': 'other@example.com'},                          # same username
+])
+def test_register_rejects_existing_user(client, duplicate):
+    client.post(REGISTER, json=new_user())
+
+    res = client.post(REGISTER, json=new_user(**duplicate))
+
+    assert res.status_code == 409
+    assert res.json['error'] == 'User already exists'
+
+
+@pytest.mark.parametrize('missing', ['username', 'email', 'password'])
+def test_register_requires_all_fields(client, missing):
+    payload = new_user()
+    del payload[missing]
+
+    res = client.post(REGISTER, json=payload)
+
+    assert res.status_code == 400
+    assert res.json['error'] == 'Username, email, and password are required'
+
+
+@pytest.mark.parametrize('field, value, error', [
+    ('email', 'not-an-email', 'Invalid email address'),
+    ('email', 'a@b', 'Invalid email address'),
+    ('username', 'ab', 'Username must be 3-80 characters'),
+    ('username', 'x' * 81, 'Username must be 3-80 characters'),
+    ('password', '12345', 'Password must be at least 6 characters'),
+])
+def test_register_validates_fields(client, field, value, error):
+    res = client.post(REGISTER, json=new_user(**{field: value}))
+
+    assert res.status_code == 400
+    assert res.json['error'] == error
+
+
+@pytest.mark.parametrize('body', [None, 'just a string', ['a', 'list']])
+def test_register_rejects_non_object_body(client, body):
+    res = client.post(REGISTER, json=body)
+
+    assert res.status_code == 400
+
+
+# --- Login ---
+
+def test_login_returns_token_and_user(client):
+    client.post(REGISTER, json=new_user())
+
+    res = client.post(LOGIN, json={'email': 'new@example.com', 'password': 'secret123'})
+
+    assert res.status_code == 200
+    assert res.json['message'] == 'Login successful'
+    assert res.json['access_token']
+    assert res.json['user'] == {'id': 1, 'username': 'newuser', 'email': 'new@example.com'}
+
+
+def test_login_email_is_case_insensitive(client):
+    client.post(REGISTER, json=new_user())
+
+    res = client.post(LOGIN, json={'email': 'NEW@Example.com', 'password': 'secret123'})
+
+    assert res.status_code == 200
+
+
+@pytest.mark.parametrize('email, password', [
+    ('new@example.com', 'wrong-password'),
+    ('ghost@example.com', 'secret123'),
+])
+def test_login_rejects_bad_credentials(client, email, password):
+    client.post(REGISTER, json=new_user())
+
+    res = client.post(LOGIN, json={'email': email, 'password': password})
+
+    assert res.status_code == 401
+    # Same message for both cases, so the response doesn't reveal which emails exist
+    assert res.json['error'] == 'Invalid email or password'
+
+
+def test_login_requires_email_and_password(client):
+    res = client.post(LOGIN, json={'email': 'new@example.com'})
+
+    assert res.status_code == 400

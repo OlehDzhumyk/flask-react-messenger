@@ -79,17 +79,25 @@ class Message(db.Model):
     # Foreign Keys
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
 
-    chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
 
     def to_dict(self):
         """Helper to serialize message data for API responses."""
         return {
             'id': self.id,
             'content': self.content,
-            'timestamp': self.timestamp.isoformat(),
+            'timestamp': _utc_isoformat(self.timestamp),
             'author_id': self.user_id,
             'chat_id': self.chat_id
         }
 
     def __repr__(self):
         return f'<Message {self.id} in Chat {self.chat_id}>'
+
+
+def _utc_isoformat(dt):
+    """Timestamps are stored in UTC, but the column has no timezone, so add it back
+    explicitly; otherwise browsers would parse the value as local time."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()

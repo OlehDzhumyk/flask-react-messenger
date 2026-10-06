@@ -1,10 +1,14 @@
 import os
 import logging
+from datetime import timedelta
 from typing import Optional, Dict, Any
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from extensions import db, migrate, jwt, swagger
 from flask_cors import CORS
 from commands import seed_db_command
+from models import User
+
+DEV_JWT_SECRET = 'insecure-development-jwt-secret-change-me'
 
 def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     """
@@ -22,10 +26,12 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
 
     # Configuration
     app.config.from_mapping(
-        SECRET_KEY='dev',
+        SECRET_KEY=os.environ.get('SECRET_KEY', 'dev'),
         SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///local.db'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
-        JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY', 'super-secret-key-change-this'),
+        JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY', DEV_JWT_SECRET),
+        # No refresh tokens yet, so keep sessions usable for a working day
+        JWT_ACCESS_TOKEN_EXPIRES=timedelta(hours=int(os.environ.get('JWT_EXPIRES_HOURS', 12))),
         SWAGGER={
             'title': 'Flask-React Messenger API',
             'uiversion': 3,
@@ -48,8 +54,10 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     else:
         app.config.from_mapping(test_config)
 
-    # CORS Setup
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    if app.config['JWT_SECRET_KEY'] == DEV_JWT_SECRET and not app.config.get('TESTING'):
+        app.logger.warning("JWT_SECRET_KEY is not set; using an insecure development key")
+
+    CORS(app, resources={r"/api/*": {"origins": os.environ.get('CORS_ORIGINS', '*').split(',')}})
 
     try:
         os.makedirs(app.instance_path)
@@ -61,6 +69,12 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     migrate.init_app(app, db)
     jwt.init_app(app)
     swagger.init_app(app)
+
+    # Resolve the token's user on every protected request. Tokens of deleted
+    # accounts then get a 401 instead of reaching the endpoint.
+    @jwt.user_lookup_loader
+    def load_user(_jwt_header, jwt_data):
+        return db.session.get(User, int(jwt_data['sub']))
 
     # Register Blueprints
     from auth import bp as auth_bp
@@ -74,9 +88,6 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
     from users import bp as users_bp
     app.register_blueprint(users_bp)
 
-    with app.app_context():
-        from models import User
-
     # Request Logging Hook
     @app.after_request
     def log_request_info(response):
@@ -85,10 +96,9 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
         )
         return response
 
-    @app.route('/hello')
-    def hello():
-        app.logger.info("Hello endpoint was called manually")
-        return 'Hello, World!'
+    @app.route('/api/health')
+    def health():
+        return jsonify({'status': 'ok'})
 
     # Register CLI command
     app.cli.add_command(seed_db_command)

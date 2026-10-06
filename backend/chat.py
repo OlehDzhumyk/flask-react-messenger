@@ -1,7 +1,13 @@
+from datetime import timezone
+
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_current_user
 from extensions import db
 from models import User, Chat, Message
+from validation import json_body, clean_text
+
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 100
 
 # Blueprint 1: Handles Chat operations and sending messages to a chat.
 # Base URL: /api/chats
@@ -16,7 +22,7 @@ message_bp = Blueprint('message', __name__, url_prefix='/api/messages')
 @jwt_required()
 def get_chats():
     """
-    Retrieve all chats for the current user.
+    Retrieve all chats for the current user, most recently active first.
     ---
     tags:
       - Chats
@@ -36,23 +42,23 @@ def get_chats():
                 type: integer
               partner_username:
                 type: string
+              last_message:
+                type: object
+                description: Latest message in the chat, or null if it has none
     """
-    current_user_id = int(get_jwt_identity())
-    current_user = db.session.get(User, current_user_id)
+    me = get_current_user()
+    summaries = []
+    for chat in me.chats:
+        partner = next((p for p in chat.participants if p.id != me.id), None)
+        last_message = (Message.query.filter_by(chat_id=chat.id)
+                        .order_by(Message.id.desc()).first())
+        summary = _chat_summary(chat, partner)
+        summary['last_message'] = last_message.to_dict() if last_message else None
+        last_active = last_message.timestamp if last_message else chat.created_at
+        summaries.append((_as_utc(last_active), summary))
 
-    results = []
-
-    # Iterate over the user's chats
-    for chat in current_user.chats:
-        # MVP Logic for 1-on-1: Find the participant who is NOT me.
-        partner = next((p for p in chat.participants if p.id != current_user_id), None)
-        results.append({
-            'id': chat.id,
-            'partner_id': partner.id if partner else None,
-            'partner_username': partner.username if partner else "Unknown",
-        })
-
-    return jsonify(results), 200
+    summaries.sort(key=lambda item: item[0], reverse=True)
+    return jsonify([summary for _, summary in summaries]), 200
 
 
 @chat_bp.route('', methods=['POST'])
@@ -87,38 +93,28 @@ def create_chat():
       404:
         description: Recipient not found
     """
-    current_user_id = int(get_jwt_identity())
-    data = request.get_json()
-    recipient_id = data.get('recipient_id')
+    me = get_current_user()
+    recipient_id = json_body().get('recipient_id')
 
-    if not recipient_id:
+    if type(recipient_id) is not int:
         return jsonify({'error': 'Recipient ID is required'}), 400
 
-    if current_user_id == recipient_id:
+    if me.id == recipient_id:
         return jsonify({'error': 'Cannot chat with yourself'}), 400
 
     recipient = db.session.get(User, recipient_id)
     if not recipient:
         return jsonify({'error': 'Recipient not found'}), 404
 
-    current_user = db.session.get(User, current_user_id)
-
     # Return the existing 1-to-1 chat instead of creating a duplicate
-    existing_chat = None
-
-    for chat in current_user.chats:
-        if len(chat.participants) == 2:
-            participant_ids = [p.id for p in chat.participants]
-            if recipient.id in participant_ids:
-                existing_chat = chat
-                break
-
+    existing_chat = next(
+        (chat for chat in me.chats if len(chat.participants) == 2 and recipient in chat.participants),
+        None,
+    )
     if existing_chat:
-        return jsonify(_chat_summary(existing_chat, recipient, 'Chat already exists')), 200
+        return jsonify({**_chat_summary(existing_chat, recipient), 'message': 'Chat already exists'}), 200
 
-    new_chat = Chat()
-    new_chat.participants.append(current_user)
-    new_chat.participants.append(recipient)
+    new_chat = Chat(participants=[me, recipient])
 
     try:
         db.session.add(new_chat)
@@ -127,18 +123,32 @@ def create_chat():
         db.session.rollback()
         return jsonify({'error': 'Failed to create chat'}), 500
 
-    return jsonify(_chat_summary(new_chat, recipient, 'Chat created')), 201
+    return jsonify({**_chat_summary(new_chat, recipient), 'message': 'Chat created'}), 201
 
 
-def _chat_summary(chat, partner, message):
-    """Same shape as GET /api/chats items, so the client can open the chat straight away."""
+def _chat_summary(chat, partner):
+    """Chat as seen by one participant. POST /api/chats returns the same shape as GET."""
     return {
-        'message': message,
         'id': chat.id,
         'chat_id': chat.id,
-        'partner_id': partner.id,
-        'partner_username': partner.username,
+        'partner_id': partner.id if partner else None,
+        'partner_username': partner.username if partner else None,
     }
+
+
+def _as_utc(dt):
+    """Timestamps are stored in UTC; some drivers return them without tzinfo."""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def _participant_chat_or_error(chat_id):
+    """Return (chat, None) if the current user is in the chat, else (None, error response)."""
+    chat = db.session.get(Chat, chat_id)
+    if not chat:
+        return None, (jsonify({'error': 'Chat not found'}), 404)
+    if get_current_user() not in chat.participants:
+        return None, (jsonify({'error': 'Access denied'}), 403)
+    return chat, None
 
 
 @chat_bp.route('/<int:chat_id>/messages', methods=['POST'])
@@ -175,26 +185,15 @@ def send_message(chat_id):
       404:
         description: Chat not found
     """
-    current_user_id = int(get_jwt_identity())
-    data = request.get_json()
-    content = data.get('content')
-
+    content = clean_text(json_body().get('content'))
     if not content:
         return jsonify({'error': 'Message content is required'}), 400
 
-    chat = db.session.get(Chat, chat_id)
-    if not chat:
-        return jsonify({'error': 'Chat not found'}), 404
+    chat, error = _participant_chat_or_error(chat_id)
+    if error:
+        return error
 
-    is_participant = any(user.id == current_user_id for user in chat.participants)
-    if not is_participant:
-        return jsonify({'error': 'Access denied'}), 403
-
-    message = Message(
-        content=content,
-        user_id=current_user_id,
-        chat_id=chat_id
-    )
+    message = Message(content=content, user_id=get_current_user().id, chat_id=chat.id)
 
     try:
         db.session.add(message)
@@ -221,44 +220,29 @@ def get_messages(chat_id):
     security:
       - Bearer: []
     """
-    current_user_id = int(get_jwt_identity())
-
-    # Get query params
-    limit = request.args.get('limit', 50, type=int)
+    limit = request.args.get('limit', DEFAULT_PAGE_SIZE, type=int)
+    limit = max(1, min(limit, MAX_PAGE_SIZE))
     after_id = request.args.get('after_id', type=int)
     before_id = request.args.get('before_id', type=int)
 
-    chat = db.session.get(Chat, chat_id)
-    if not chat:
-        return jsonify({'error': 'Chat not found'}), 404
+    chat, error = _participant_chat_or_error(chat_id)
+    if error:
+        return error
 
-    is_participant = any(user.id == current_user_id for user in chat.participants)
-    if not is_participant:
-        return jsonify({'error': 'Access denied'}), 403
-
-    # Build Query
-    query = Message.query.filter_by(chat_id=chat_id)
-
-    if after_id:
-        # Polling: Get NEWER messages
-        query = query.filter(Message.id > after_id).order_by(Message.timestamp.asc())
-    elif before_id:
-        # Pagination: Get OLDER messages (History)
-        query = query.filter(Message.id < before_id).order_by(Message.timestamp.desc()).limit(limit)
+    # Message ids increase over time, so they double as stable pagination cursors.
+    query = Message.query.filter_by(chat_id=chat.id)
+    if after_id is not None:
+        # Polling: the oldest messages newer than the client's last one
+        messages = query.filter(Message.id > after_id).order_by(Message.id.asc()).limit(limit).all()
     else:
-        # Initial Load: Get latest messages
-        query = query.order_by(Message.timestamp.desc()).limit(limit)
-
-    messages = query.all()
-
-    # If we fetched by DESC (Initial load OR Pagination), reverse to show chronological order
-    if not after_id:
-        messages = messages[::-1]
+        # Initial load or scrolling back: the newest page before the cursor, oldest first
+        if before_id is not None:
+            query = query.filter(Message.id < before_id)
+        messages = query.order_by(Message.id.desc()).limit(limit).all()[::-1]
 
     return jsonify([msg.to_dict() for msg in messages]), 200
 
 
-# --- Message Control Routes (Edit/Delete) ---
 
 @message_bp.route('/<int:message_id>', methods=['PUT'])
 @jwt_required()
@@ -266,10 +250,7 @@ def edit_message(message_id):
     """
     Edit a specific message.
     """
-    current_user_id = int(get_jwt_identity())
-    data = request.get_json()
-    new_content = data.get('content')
-
+    new_content = clean_text(json_body().get('content'))
     if not new_content:
         return jsonify({'error': 'Content is required'}), 400
 
@@ -277,7 +258,7 @@ def edit_message(message_id):
     if not message:
         return jsonify({'error': 'Message not found'}), 404
 
-    if message.user_id != current_user_id:
+    if message.user_id != get_current_user().id:
         return jsonify({'error': 'Access denied'}), 403
 
     message.content = new_content
@@ -297,13 +278,11 @@ def delete_message(message_id):
     """
     Delete a specific message.
     """
-    current_user_id = int(get_jwt_identity())
-
     message = db.session.get(Message, message_id)
     if not message:
         return jsonify({'error': 'Message not found'}), 404
 
-    if message.user_id != current_user_id:
+    if message.user_id != get_current_user().id:
         return jsonify({'error': 'Access denied'}), 403
 
     try:

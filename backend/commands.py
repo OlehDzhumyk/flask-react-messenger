@@ -1,138 +1,90 @@
-import click
 import random
 from datetime import datetime, timedelta, timezone
+
+import click
 from flask.cli import with_appcontext
-from extensions import db
-from models import User, Chat, Message
 from werkzeug.security import generate_password_hash
+
+from extensions import db
+from models import User, Chat, Message, user_chat_association
+
+DEMO_PASSWORD = 'password'
+
+# (name, conversation with Alice: list of (sender, text) where sender is 'alice' or 'them')
+SHORT_CONVERSATIONS = [
+    ('Charlie', [('alice', 'Welcome Charlie!'), ('them', 'Thanks! Glad to be here.')]),
+    ('Diana', [('them', 'Are we still on for lunch tomorrow?'), ('alice', 'Yes, 12:30 works for me.')]),
+    ('Ethan', [('them', 'I sent you the slides for Monday.'), ('alice', 'Got them, thanks!')]),
+    ('Fiona', [('alice', 'How was the conference?'), ('them', 'Great talks on distributed systems.')]),
+    ('George', [('them', 'Can you share the API docs link?'), ('alice', 'It is /apidocs on the backend.')]),
+    ('Hannah', [('alice', 'Happy birthday! 🎉'), ('them', 'Thank you!!')]),
+    ('Ivan', [('them', 'The build is green again.'), ('alice', 'Nice, what was wrong?'),
+              ('them', 'A pinned dependency.')]),
+    ('Julia', [('alice', 'Do you have time for a quick review?'), ('them', 'Sure, send it over.')]),
+]
+
+LONG_CONVERSATION = [
+    "Did you push the latest changes?",
+    "Yes, they're on the develop branch.",
+    "Can you review my PR when you get a chance?",
+    "Looking at it now.",
+    "The pagination logic is tricky but it works.",
+    "Scrolling back through history keeps the position now.",
+    "Docker containers are up and running.",
+    "Let's schedule a demo for Friday.",
+    "Don't forget to update the documentation.",
+    "Authentication flow looks solid.",
+    "This is a longer message to check how text wrapping works. "
+    "It should still look tidy and readable across a couple of lines.",
+]
+
 
 @click.command(name='seed_db')
 @with_appcontext
 def seed_db_command():
-    """Populates the database with clean, chronological dummy data."""
+    """Replace all data with demo users and conversations."""
+    rng = random.Random(42)  # same demo data on every run
 
-    # 1. Clear existing data
-    db.drop_all()
-    db.create_all()
-    click.echo('Initialized the database.')
-
-    # 2. Create Core Users
-    password = generate_password_hash('password')
-
-    alice = User(username='Alice', email='alice@test.com', password_hash=password)
-    bob = User(username='Bob', email='bob@test.com', password_hash=password)
-    charlie = User(username='Charlie', email='charlie@test.com', password_hash=password)
-
-    users = [alice, bob, charlie]
-
-    # Create extra users for Sidebar testing
-    extra_users = []
-    for i in range(4, 15):
-        u = User(
-            username=f'User_{i}',
-            email=f'user{i}@test.com',
-            password_hash=password
-        )
-        extra_users.append(u)
-
-    users.extend(extra_users)
-
-    db.session.add_all(users)
+    Message.query.delete()
+    db.session.execute(user_chat_association.delete())
+    Chat.query.delete()
+    User.query.delete()
     db.session.commit()
-    click.echo(f'Created {len(users)} users (password: "password").')
+    click.echo('Cleared existing data.')
 
-    # 3. Create Chats
-    # Chat 1: Alice & Bob (Main conversation)
-    chat1 = Chat()
-    chat1.participants.append(alice)
-    chat1.participants.append(bob)
+    password_hash = generate_password_hash(DEMO_PASSWORD)
 
-    # Chat 2: Alice & Charlie
-    chat2 = Chat()
-    chat2.participants.append(alice)
-    chat2.participants.append(charlie)
+    def make_user(name):
+        return User(username=name, email=f'{name.lower()}@test.com', password_hash=password_hash)
 
-    # Create random chats for Alice to test scrolling
-    random_chats = []
-    for u in extra_users:
-        c = Chat()
-        c.participants.append(alice)
-        c.participants.append(u)
-        random_chats.append(c)
+    alice, bob = make_user('Alice'), make_user('Bob')
+    others = [(make_user(name), conversation) for name, conversation in SHORT_CONVERSATIONS]
+    db.session.add_all([alice, bob] + [user for user, _ in others])
 
-    db.session.add_all([chat1, chat2] + random_chats)
-    db.session.commit()
-    click.echo('Created chats.')
-
-    # 4. Create Messages (Chronologically Ordered)
+    now = datetime.now(timezone.utc)
     messages = []
 
-    # Base start time: 2 days ago
-    base_time = datetime.now(timezone.utc) - timedelta(days=2)
+    # A long conversation between Alice and Bob over the last two days
+    chat_with_bob = Chat(participants=[alice, bob], created_at=now - timedelta(days=2))
+    sent_at = chat_with_bob.created_at
+    for _ in range(100):
+        sent_at += timedelta(minutes=rng.randint(5, 25))
+        author = rng.choice([alice, bob])
+        messages.append(Message(content=rng.choice(LONG_CONVERSATION), author=author,
+                                chat=chat_with_bob, timestamp=sent_at))
 
-    # Initial greeting messages
-    # We explicitly set timestamps to ensure order
-    msg1 = Message(
-        content="Hi Bob! How is the project?",
-        author=alice,
-        chat=chat1,
-        timestamp=base_time + timedelta(minutes=1)
-    )
-    msg2 = Message(
-        content="Hey Alice. It is going well!",
-        author=bob,
-        chat=chat1,
-        timestamp=base_time + timedelta(minutes=5)
-    )
-    msg3 = Message(
-        content="Welcome Charlie!",
-        author=alice,
-        chat=chat2,
-        timestamp=base_time + timedelta(minutes=10)
-    )
-    messages.extend([msg1, msg2, msg3])
+    # Short conversations, each finishing a bit earlier than the previous one
+    for index, (user, conversation) in enumerate(others):
+        started = now - timedelta(days=3 + index, hours=rng.randint(0, 6))
+        chat = Chat(participants=[alice, user], created_at=started)
+        for offset, (sender, text) in enumerate(conversation):
+            messages.append(Message(content=text, author=alice if sender == 'alice' else user,
+                                    chat=chat, timestamp=started + timedelta(minutes=3 * (offset + 1))))
 
-    # Realistic filler phrases
-    filler_phrases = [
-        "Just testing the infinite scroll.",
-        "The layout looks much cleaner now.",
-        "Did you push the latest changes?",
-        "Yep, deployed to production.",
-        "Docker containers are up and running.",
-        "The pagination logic is tricky but works.",
-        "Let's schedule a meeting for Friday.",
-        "Can you review my PR?",
-        "Don't forget to update the documentation.",
-        "Authentication flow is solid.",
-        "Frontend state management is handled by Context.",
-        "This is a longer message to check how the text wrapping works. It should look nice and readable."
-    ]
-
-    # Generate 100 filler messages for Chat 1 (Alice & Bob)
-    # We add them ONE BY ONE with increasing timestamps
-    current_time = base_time + timedelta(hours=1)
-
-    for i in range(100):
-        author = alice if random.choice([True, False]) else bob
-        text = random.choice(filler_phrases)
-
-        # Increment time by 5-20 minutes for each message to simulate real chat
-        time_jump = random.randint(5, 20)
-        current_time += timedelta(minutes=time_jump)
-
-        msg = Message(
-            content=text,
-            author=author,
-            chat=chat1,
-            timestamp=current_time
-        )
-        messages.append(msg)
-
-    # Sorting list just in case, though logic guarantees order
-    messages.sort(key=lambda x: x.timestamp)
-
+    # Insert in time order so message ids follow timestamps
+    messages.sort(key=lambda message: message.timestamp)
     db.session.add_all(messages)
     db.session.commit()
 
-    click.echo(f'Added {len(messages)} sample messages with correct timestamps.')
-    click.echo('Database seeding completed!')
+    click.echo(f'Created {2 + len(others)} users and {len(messages)} messages '
+               f'(log in as alice@test.com / {DEMO_PASSWORD}).')

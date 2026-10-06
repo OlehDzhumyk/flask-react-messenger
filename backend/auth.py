@@ -1,8 +1,12 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token
-from app import db
+from sqlalchemy import func
+from extensions import db
 from models import User
+from validation import (
+    json_body, clean_text, normalise_email, username_error, email_error, password_error
+)
 
 # Create a Blueprint for authentication routes.
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
@@ -39,23 +43,25 @@ def register():
       201:
         description: User created successfully
       400:
-        description: Missing required fields
+        description: Missing or invalid fields
       409:
         description: User already exists
     """
-    data = request.get_json()
-
-    # Validation: Ensure all required fields are present.
-    username = data.get('username')
-    email = data.get('email')
+    data = json_body()
+    username = clean_text(data.get('username'))
+    email = normalise_email(data.get('email'))
     password = data.get('password')
 
-    if not username or not email or not password:
+    if not username or not email or not isinstance(password, str) or not password:
         return jsonify({'error': 'Username, email, and password are required'}), 400
+
+    error = username_error(username) or email_error(email) or password_error(password)
+    if error:
+        return jsonify({'error': error}), 400
 
     # Check for existing user to prevent duplicates.
     # We check both email and username as they must be unique in the schema.
-    if User.query.filter((User.email == email) | (User.username == username)).first():
+    if User.query.filter((func.lower(User.email) == email) | (User.username == username)).first():
         return jsonify({'error': 'User already exists'}), 409
 
     # Security: Never store passwords in plain text.
@@ -70,9 +76,9 @@ def register():
     try:
         db.session.add(new_user)
         db.session.commit()
-    except Exception as e:
-        # Rollback in case of database error to keep the session clean.
+    except Exception:
         db.session.rollback()
+        current_app.logger.exception("Failed to register user")
         return jsonify({'error': 'Database error'}), 500
 
     return jsonify({'message': 'User created successfully'}), 201
@@ -121,16 +127,15 @@ def login():
       401:
         description: Invalid credentials
     """
-    data = request.get_json()
-    email = data.get('email')
+    data = json_body()
+    email = normalise_email(data.get('email'))
     password = data.get('password')
 
-    # Validate input presence
-    if not email or not password:
+    if not email or not isinstance(password, str) or not password:
         return jsonify({'error': 'Email and password are required'}), 400
 
     # Find user by email
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter(func.lower(User.email) == email).first()
 
     # Verify user exists and password matches hash
     if not user or not check_password_hash(user.password_hash, password):

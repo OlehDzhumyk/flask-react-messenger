@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_current_user
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from extensions import db
 from models import User
+from validation import json_body, clean_text, normalise_email, username_error, email_error
 
 bp = Blueprint('users', __name__, url_prefix='/api')
 
@@ -11,8 +13,8 @@ bp = Blueprint('users', __name__, url_prefix='/api')
 @jwt_required()
 def search_users():
     """
-    Search for a user by their exact email address.
-    Security update: Partial search disabled to prevent user enumeration.
+    Search for a user by their exact email address (case-insensitive).
+    Partial matches are not supported, so the endpoint can't be used to enumerate users.
     ---
     tags:
       - Users
@@ -39,17 +41,14 @@ def search_users():
               email:
                 type: string
     """
-    current_user_id = int(get_jwt_identity())
-    query = request.args.get('q', '').strip()
+    query = request.args.get('q', '').strip().lower()
 
-    # Basic validation: ensure query looks like an email to avoid unnecessary DB calls
     if not query or '@' not in query:
         return jsonify([]), 200
 
-    # Strict filter: Email must match exactly, and exclude self
     user = User.query.filter(
-        User.email == query,
-        User.id != current_user_id
+        func.lower(User.email) == query,
+        User.id != get_current_user().id
     ).first()
 
     results = []
@@ -72,21 +71,15 @@ def delete_profile():
     responses:
       200:
         description: Account deleted successfully
-      404:
-        description: User not found
     """
-    current_user_id = int(get_jwt_identity())
-    user = db.session.get(User, current_user_id)
-
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+    user = get_current_user()
 
     try:
         db.session.delete(user)
         db.session.commit()
     except Exception:
         db.session.rollback()
-        current_app.logger.exception("Failed to delete user %s", current_user_id)
+        current_app.logger.exception("Failed to delete user %s", user.id)
         return jsonify({'error': 'Failed to delete account'}), 500
 
     return jsonify({'message': 'Account deleted successfully'}), 200
@@ -115,11 +108,7 @@ def get_profile():
             email:
               type: string
     """
-    current_user_id = int(get_jwt_identity())
-    user = db.session.get(User, current_user_id)
-
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+    user = get_current_user()
 
     return jsonify({
         'id': user.id,
@@ -153,36 +142,33 @@ def update_profile():
       200:
         description: Profile updated successfully
       400:
-        description: Invalid input or username/email already taken
-      404:
-        description: User not found
+        description: Invalid username or email
+      409:
+        description: Username or email already taken
     """
-    current_user_id = int(get_jwt_identity())
-    user = db.session.get(User, current_user_id)
+    user = get_current_user()
 
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+    data = json_body()
+    new_username = clean_text(data.get('username'))
+    new_email = normalise_email(data.get('email'))
 
-    data = request.get_json()
-
-    # Update fields if provided
-    new_username = data.get('username')
-    new_email = data.get('email')
+    error = (new_username and username_error(new_username)) or (new_email and email_error(new_email))
+    if error:
+        return jsonify({'error': error}), 400
 
     if new_username:
-        user.username = new_username.strip()
-
+        user.username = new_username
     if new_email:
-        user.email = new_email.strip()
+        user.email = new_email
 
     try:
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
-        return jsonify({'error': 'Username or Email already exists'}), 400
-    except Exception as e:
+        return jsonify({'error': 'Username or email already exists'}), 409
+    except Exception:
         db.session.rollback()
-        print(f"Error updating profile: {e}")
+        current_app.logger.exception("Failed to update profile for user %s", user.id)
         return jsonify({'error': 'Failed to update profile'}), 500
 
     return jsonify({
