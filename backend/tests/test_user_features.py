@@ -71,3 +71,24 @@ def test_delete_account(client, app):
     # 4. Verify login fails
     login_res = client.post('/api/auth/login', json={'email': 'del@test.com', 'password': 'pw'})
     assert login_res.status_code == 401
+
+def test_deleted_users_messages_stay_in_partners_chat(client):
+    """
+    GIVEN a chat where the partner has sent a message
+    WHEN the partner deletes their account
+    THEN the message is still visible to the remaining user, with no author.
+    """
+    client.post('/api/auth/register', json={'username': 'stays', 'email': 'stays@test.com', 'password': 'pw'})
+    client.post('/api/auth/register', json={'username': 'leaves', 'email': 'leaves@test.com', 'password': 'pw'})
+    stays_headers = get_auth_header(client, 'stays@test.com', 'pw')
+    leaves_headers = get_auth_header(client, 'leaves@test.com', 'pw')
+
+    leaves_id = client.get('/api/users?q=leaves@test.com', headers=stays_headers).json[0]['id']
+    chat_id = client.post('/api/chats', json={'recipient_id': leaves_id}, headers=stays_headers).json['chat_id']
+    client.post(f'/api/chats/{chat_id}/messages', json={'content': 'goodbye'}, headers=leaves_headers)
+
+    assert client.delete('/api/profile', headers=leaves_headers).status_code == 200
+
+    response = client.get(f'/api/chats/{chat_id}/messages', headers=stays_headers)
+    assert response.status_code == 200
+    assert [(m['content'], m['author_id']) for m in response.json] == [('goodbye', None)]

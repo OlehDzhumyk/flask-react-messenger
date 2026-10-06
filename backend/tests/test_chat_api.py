@@ -45,6 +45,15 @@ def test_create_chat_and_send_message(client, app):
 
     assert chat_response.status_code == 201
     chat_id = chat_response.json['chat_id']
+    # Same shape as GET /api/chats, so the client can open the new chat immediately
+    assert chat_response.json['id'] == chat_id
+    assert chat_response.json['partner_id'] == user_b_id
+    assert chat_response.json['partner_username'] == 'userB'
+
+    # Starting the same chat again returns the existing one
+    repeat = client.post('/api/chats', json=chat_payload, headers=auth_headers)
+    assert repeat.status_code == 200
+    assert repeat.json['id'] == chat_id
 
     # 4. Send Message (POST /api/chats/<id>/messages)
     msg_payload = {'content': 'Hello from User A'}

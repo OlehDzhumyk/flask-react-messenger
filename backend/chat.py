@@ -103,7 +103,7 @@ def create_chat():
 
     current_user = db.session.get(User, current_user_id)
 
-    # --- LOGIC TO PREVENT DUPLICATES ---
+    # Return the existing 1-to-1 chat instead of creating a duplicate
     existing_chat = None
 
     for chat in current_user.chats:
@@ -114,11 +114,7 @@ def create_chat():
                 break
 
     if existing_chat:
-        return jsonify({
-            'message': 'Chat already exists',
-            'chat_id': existing_chat.id
-        }), 200
-    # -----------------------------------
+        return jsonify(_chat_summary(existing_chat, recipient, 'Chat already exists')), 200
 
     new_chat = Chat()
     new_chat.participants.append(current_user)
@@ -131,7 +127,18 @@ def create_chat():
         db.session.rollback()
         return jsonify({'error': 'Failed to create chat'}), 500
 
-    return jsonify({'message': 'Chat created', 'chat_id': new_chat.id}), 201
+    return jsonify(_chat_summary(new_chat, recipient, 'Chat created')), 201
+
+
+def _chat_summary(chat, partner, message):
+    """Same shape as GET /api/chats items, so the client can open the chat straight away."""
+    return {
+        'message': message,
+        'id': chat.id,
+        'chat_id': chat.id,
+        'partner_id': partner.id,
+        'partner_username': partner.username,
+    }
 
 
 @chat_bp.route('/<int:chat_id>/messages', methods=['POST'])
@@ -219,7 +226,7 @@ def get_messages(chat_id):
     # Get query params
     limit = request.args.get('limit', 50, type=int)
     after_id = request.args.get('after_id', type=int)
-    before_id = request.args.get('before_id', type=int) # 👈 ADDED BACK
+    before_id = request.args.get('before_id', type=int)
 
     chat = db.session.get(Chat, chat_id)
     if not chat:
@@ -237,7 +244,6 @@ def get_messages(chat_id):
         query = query.filter(Message.id > after_id).order_by(Message.timestamp.asc())
     elif before_id:
         # Pagination: Get OLDER messages (History)
-        # 👈 ADDED BACK: Logic to fetch messages OLDER than before_id
         query = query.filter(Message.id < before_id).order_by(Message.timestamp.desc()).limit(limit)
     else:
         # Initial Load: Get latest messages
