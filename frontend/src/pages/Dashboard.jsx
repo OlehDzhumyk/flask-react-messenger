@@ -32,9 +32,7 @@ const Dashboard = () => {
             {activeChat ? (
                 <div className="flex flex-col h-full w-full bg-white relative">
                     <div className="flex-1 overflow-hidden relative h-full">
-                        {/* Refactoring: ChatWindow is now self-contained.
-                            We pass both chatId (for fetching messages) and partnerId (for the header).
-                        */}
+                        {/* ChatWindow fetches its own messages; partnerId is used for the header. */}
                         <ChatWindow
                             key={activeChat.chatId}
                             activeChat={{

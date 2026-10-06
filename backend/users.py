@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import IntegrityError
 from extensions import db
@@ -84,10 +84,9 @@ def delete_profile():
     try:
         db.session.delete(user)
         db.session.commit()
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        # It is good practice to log the error here
-        print(f"Error deleting user: {e}")
+        current_app.logger.exception("Failed to delete user %s", current_user_id)
         return jsonify({'error': 'Failed to delete account'}), 500
 
     return jsonify({'message': 'Account deleted successfully'}), 200

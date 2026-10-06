@@ -1,7 +1,5 @@
 import pytest
 from flask import Flask
-# We anticipate importing 'db' from app, even though it doesn't exist yet (TDD RED state).
-# This import will cause the test to fail, which is the intended first step.
 from app import create_app, db
 
 
