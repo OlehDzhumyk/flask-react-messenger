@@ -8,7 +8,7 @@ const MessageInput = ({ onSend, disabled }) => {
         e.preventDefault();
         if (!text.trim() || disabled) return;
 
-        onSend(text);
+        onSend(text.trim());
         setText('');
     };
 
@@ -21,7 +21,7 @@ const MessageInput = ({ onSend, disabled }) => {
                     onChange={(e) => setText(e.target.value)}
                     placeholder="Type a message..."
                     disabled={disabled}
-                    autoFocus // UX improvement: Focus input automatically
+                    autoFocus
                     className="flex-1 px-5 py-3 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all shadow-sm"
                 />
                 <button

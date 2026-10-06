@@ -5,13 +5,22 @@ import { useAuth } from '../../context/AuthContext';
 import { useUsers } from '../../context/UsersContext';
 import { getChatPartner } from '../../utils/chatHelpers';
 import { DELETED_USER } from '../../utils/constants';
+import { formatChatListTime } from '../../utils/dates';
 
 // Components
 import SidebarItem from './SidebarItem';
 import SettingsModal from './SettingsModal';
 import NewChatModal from './NewChatModal';
 
-const Sidebar = ({ onChatSelect }) => {
+// New chats and last-message previews are picked up by polling, like messages
+const CHAT_LIST_REFRESH_MS = 10000;
+
+const previewText = (lastMessage, currentUserId) => {
+    if (!lastMessage) return 'No messages yet';
+    return lastMessage.author_id === currentUserId ? `You: ${lastMessage.content}` : lastMessage.content;
+};
+
+const Sidebar = ({ onChatSelect, activeChatId, refreshKey }) => {
     const [chats, setChats] = useState([]);
 
     // Local Filter State
@@ -36,14 +45,17 @@ const Sidebar = ({ onChatSelect }) => {
             if (validParticipants.length > 0) {
                 cacheUsers(validParticipants);
             }
-        } catch (error) {
-            console.error("[Sidebar] Failed to load chats", error);
+        } catch {
+            // Keep showing the last list; the next refresh will retry
         }
     }, [cacheUsers]);
 
     useEffect(() => {
-        if (currentUser) fetchChats();
-    }, [currentUser, fetchChats]);
+        if (!currentUser) return undefined;
+        fetchChats();
+        const intervalId = setInterval(fetchChats, CHAT_LIST_REFRESH_MS);
+        return () => clearInterval(intervalId);
+    }, [currentUser, fetchChats, refreshKey]);
 
 
     // 2. Local Filter Logic
@@ -128,7 +140,9 @@ const Sidebar = ({ onChatSelect }) => {
                             <SidebarItem
                                 key={chat.id}
                                 userId={displayId}
-                                subText={'Click to view messages'}
+                                subText={previewText(chat.last_message, currentUser?.id)}
+                                time={chat.last_message ? formatChatListTime(chat.last_message.timestamp) : undefined}
+                                isActive={chat.id === activeChatId}
                                 onClick={() => onChatSelect(chat)}
                             />
                         );
@@ -153,6 +167,8 @@ const Sidebar = ({ onChatSelect }) => {
 
 Sidebar.propTypes = {
     onChatSelect: PropTypes.func.isRequired,
+    activeChatId: PropTypes.number,
+    refreshKey: PropTypes.number,
 };
 
 export default Sidebar;

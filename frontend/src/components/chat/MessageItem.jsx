@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
+import { formatTime } from '../../utils/dates';
 
 const MessageItem = ({ message, isOwn, onEdit, onDelete }) => {
     const [isEditing, setIsEditing] = useState(false);
@@ -7,8 +8,13 @@ const MessageItem = ({ message, isOwn, onEdit, onDelete }) => {
     const [showMenu, setShowMenu] = useState(false);
 
     const handleSave = () => {
-        if (editedContent.trim() !== message.content) {
-            onEdit(message.id, editedContent);
+        const content = editedContent.trim();
+        if (!content) {
+            handleCancel();
+            return;
+        }
+        if (content !== message.content) {
+            onEdit(message.id, content);
         }
         setIsEditing(false);
         setShowMenu(false);
@@ -21,7 +27,6 @@ const MessageItem = ({ message, isOwn, onEdit, onDelete }) => {
     };
 
     const handleDelete = () => {
-        // Simple confirm for MVP
         if (window.confirm('Are you sure you want to delete this message?')) {
             onDelete(message.id);
         }
@@ -80,8 +85,7 @@ const MessageItem = ({ message, isOwn, onEdit, onDelete }) => {
                         <>
                             <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                             <div className={`text-[10px] mt-1 text-right ${isOwn ? 'text-blue-100' : 'text-gray-400'}`}>
-                                {new Date(message.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                {/* Add (edited) label if needed, assuming backend sends an edited_at flag */}
+                                {formatTime(message.timestamp)}
                             </div>
                         </>
                     )}

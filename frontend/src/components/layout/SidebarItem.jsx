@@ -2,7 +2,7 @@ import PropTypes from 'prop-types';
 import { useUsers } from '../../context/UsersContext';
 import { DELETED_USER } from '../../utils/constants';
 
-const SidebarItem = ({ userId, subText, onClick, isActive }) => {
+const SidebarItem = ({ userId, subText, time, onClick, isActive }) => {
     const { getUser } = useUsers();
 
     const realUser = getUser(userId);
@@ -19,10 +19,12 @@ const SidebarItem = ({ userId, subText, onClick, isActive }) => {
         : (isActive ? 'bg-blue-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600');
 
     return (
-        <div
+        <button
+            type="button"
             onClick={() => onClick(displayUser)}
+            aria-current={isActive ? 'true' : undefined}
             className={`
-                p-3 border-b border-gray-100 cursor-pointer flex items-center gap-3 transition-colors
+                w-full text-left p-3 border-b border-gray-100 flex items-center gap-3 transition-colors
                 ${isActive ? 'bg-blue-50' : 'hover:bg-gray-50'}
             `}
         >
@@ -34,22 +36,24 @@ const SidebarItem = ({ userId, subText, onClick, isActive }) => {
             </div>
 
             <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-baseline">
+                <div className="flex justify-between items-baseline gap-2">
                     <p className={`font-medium truncate ${isActive ? 'text-blue-700' : (isDeleted ? 'text-gray-400 italic' : 'text-gray-900')}`}>
                         {displayUser.username}
                     </p>
+                    {time && <span className="text-xs text-gray-400 shrink-0">{time}</span>}
                 </div>
                 <p className="text-xs text-gray-500 truncate">
                     {subText || displayUser.email}
                 </p>
             </div>
-        </div>
+        </button>
     );
 };
 
 SidebarItem.propTypes = {
     userId: PropTypes.number.isRequired,
     subText: PropTypes.string,
+    time: PropTypes.string,
     onClick: PropTypes.func.isRequired,
     isActive: PropTypes.bool,
 };

@@ -3,8 +3,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { UsersProvider } from './context/UsersContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import {Toaster} from "react-hot-toast";
-import Register from "./pages/Register.jsx";
+import Register from './pages/Register';
+import { Toaster } from 'react-hot-toast';
 
 const ProtectedRoute = ({ children }) => {
     const { user, loading } = useAuth();
@@ -16,8 +16,8 @@ const ProtectedRoute = ({ children }) => {
 function App() {
     return (
         <AuthProvider>
-            <UsersProvider> {/* <--- Wrap here */}
-                <BrowserRouter>
+            <UsersProvider>
+                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                     <Toaster position="top-center" />
                     <Routes>
                         <Route path="/login" element={<Login />} />

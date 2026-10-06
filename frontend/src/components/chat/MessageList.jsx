@@ -1,6 +1,7 @@
-import { useRef, useLayoutEffect } from 'react';
+import { Fragment, useRef, useLayoutEffect } from 'react';
 import PropTypes from 'prop-types';
 import MessageItem from './MessageItem';
+import { formatDayLabel, isDifferentDay } from '../../utils/dates';
 
 const MessageList = ({
                          messages,
@@ -93,18 +94,26 @@ const MessageList = ({
                     No messages here yet. Say hello! 👋
                 </div>
             ) : (
-                messages.map((msg) => {
-                    const authorId = msg.author_id || msg.author?.id;
-                    const isOwn = authorId === currentUser?.id;
+                messages.map((msg, index) => {
+                    const previous = messages[index - 1];
+                    const startsNewDay = !previous || isDifferentDay(previous.timestamp, msg.timestamp);
 
                     return (
-                        <MessageItem
-                            key={msg.id}
-                            message={msg}
-                            isOwn={isOwn}
-                            onEdit={onEditMessage}
-                            onDelete={onDeleteMessage}
-                        />
+                        <Fragment key={msg.id}>
+                            {startsNewDay && (
+                                <div className="flex justify-center py-2">
+                                    <span className="px-3 py-1 text-xs text-gray-500 bg-white border border-gray-200 rounded-full">
+                                        {formatDayLabel(msg.timestamp)}
+                                    </span>
+                                </div>
+                            )}
+                            <MessageItem
+                                message={msg}
+                                isOwn={msg.author_id === currentUser?.id}
+                                onEdit={onEditMessage}
+                                onDelete={onDeleteMessage}
+                            />
+                        </Fragment>
                     );
                 })
             )}

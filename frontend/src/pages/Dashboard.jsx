@@ -10,6 +10,9 @@ const Dashboard = () => {
     // State stores IDs. Single source of truth is Context.
     // Schema: { chatId: number, partnerId: number }
     const [activeChat, setActiveChat] = useState(null);
+    // Bumped when the user changes a chat, so the sidebar re-fetches its previews right away
+    const [chatListVersion, setChatListVersion] = useState(0);
+    const refreshChatList = () => setChatListVersion(version => version + 1);
 
     const { cacheUsers } = useUsers();
     const { user: currentUser } = useAuth();
@@ -19,14 +22,17 @@ const Dashboard = () => {
         // Ensure partner is cached so ChatHeader can find it by ID later
         cacheUsers([partner]);
 
-        console.log('[Dashboard] Selected chat:', chat.id, 'Partner ID:', partner.id);
         setActiveChat({ chatId: chat.id, partnerId: partner.id });
     };
 
     return (
         <MainLayout
             sidebar={
-                <Sidebar onChatSelect={handleChatSelect} />
+                <Sidebar
+                    onChatSelect={handleChatSelect}
+                    activeChatId={activeChat?.chatId}
+                    refreshKey={chatListVersion}
+                />
             }
         >
             {activeChat ? (
@@ -39,6 +45,7 @@ const Dashboard = () => {
                                 id: activeChat.chatId,
                                 partnerId: activeChat.partnerId
                             }}
+                            onChatChanged={refreshChatList}
                         />
                     </div>
                 </div>

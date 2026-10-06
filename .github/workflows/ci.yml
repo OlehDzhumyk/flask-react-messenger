@@ -36,7 +36,7 @@ jobs:
         run: pytest -v --cov=. --cov-report=term-missing
 
   frontend:
-    name: Frontend Lint & Build
+    name: Frontend Lint, Tests & Build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -54,4 +54,5 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build

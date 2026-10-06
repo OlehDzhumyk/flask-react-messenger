@@ -10,7 +10,7 @@ import ChatHeader from './ChatHeader';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 
-const ChatWindow = ({ activeChat }) => {
+const ChatWindow = ({ activeChat, onChatChanged }) => {
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -19,6 +19,9 @@ const ChatWindow = ({ activeChat }) => {
     const [hasMore, setHasMore] = useState(true);
 
     const lastIdRef = useRef(0);
+    // Polling starts only after the first page has loaded, otherwise a poll with
+    // after_id=0 would fetch the oldest messages and append them at the bottom.
+    const historyLoadedRef = useRef(false);
     const { user: currentUser } = useAuth();
 
     const chatId = activeChat?.id;
@@ -36,6 +39,7 @@ const ChatWindow = ({ activeChat }) => {
         setMessages([]);
         setHasMore(true);
         lastIdRef.current = 0;
+        historyLoadedRef.current = false;
 
         const loadInitialHistory = async () => {
             try {
@@ -50,15 +54,19 @@ const ChatWindow = ({ activeChat }) => {
                     if (msgs.length > 0) {
                         lastIdRef.current = msgs[msgs.length - 1].id;
                     }
+                    historyLoadedRef.current = true;
                     setLoading(false);
                 }
-            } catch (error) {
-                console.error("Failed to load history", error);
-                if (isMounted) setLoading(false);
+            } catch {
+                if (isMounted) {
+                    setLoading(false);
+                    toast.error('Could not load messages');
+                }
             }
         };
 
         const pollNewMessages = async () => {
+            if (!historyLoadedRef.current) return;
             try {
                 const newMsgs = await chatService.getMessages(chatId, {
                     after_id: lastIdRef.current
@@ -119,8 +127,7 @@ const ChatWindow = ({ activeChat }) => {
             } else {
                 setHasMore(false);
             }
-        } catch (error) {
-            console.error("Failed to load history", error);
+        } catch {
             toast.error("Could not load history");
         } finally {
             setIsFetchingOld(false);
@@ -135,32 +142,36 @@ const ChatWindow = ({ activeChat }) => {
             if (response && response.id) {
                 setMessages(prev => [...prev, response]);
                 lastIdRef.current = response.id;
+                onChatChanged?.();
             }
-        } catch (error) {
-            console.error(error);
-            toast.error("Failed to send message ❌");
+        } catch {
+            toast.error("Failed to send message");
         }
     };
 
+    // Edits and deletes update the UI immediately and roll back if the request fails
     const handleEditMessage = async (messageId, newContent) => {
+        const previous = messages;
+        setMessages(prev => prev.map(msg =>
+            msg.id === messageId ? { ...msg, content: newContent } : msg
+        ));
         try {
-            setMessages(prev => prev.map(msg =>
-                msg.id === messageId ? { ...msg, content: newContent } : msg
-            ));
             await chatService.updateMessage(messageId, newContent);
-            toast.success("Message updated");
-        } catch (error) {
-            console.error(error);
+            onChatChanged?.();
+        } catch {
+            setMessages(previous);
             toast.error("Failed to update message");
         }
     };
 
     const handleDeleteMessage = async (messageId) => {
+        const previous = messages;
+        setMessages(prev => prev.filter(msg => msg.id !== messageId));
         try {
-            setMessages(prev => prev.filter(msg => msg.id !== messageId));
             await chatService.deleteMessage(messageId);
-        } catch (error) {
-            console.error(error);
+            onChatChanged?.();
+        } catch {
+            setMessages(previous);
             toast.error("Failed to delete message");
         }
     };
@@ -195,6 +206,7 @@ ChatWindow.propTypes = {
         id: PropTypes.number.isRequired,
         partnerId: PropTypes.number
     }).isRequired,
+    onChatChanged: PropTypes.func,
 };
 
 export default ChatWindow;

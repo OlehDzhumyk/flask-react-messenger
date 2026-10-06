@@ -1,9 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-    // Using relative path allows Nginx/Docker proxying to work correctly in production
-    // or falls back to localhost if configured in vite proxy
-    baseURL: 'http://localhost:5000/api',
+    // Set VITE_API_URL to point the client at a different backend
+    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
     headers: {
         'Content-Type': 'application/json',
     },
