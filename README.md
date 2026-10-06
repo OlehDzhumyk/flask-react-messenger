@@ -1,12 +1,14 @@
 # Flask-React Messenger
 
+[![CI Pipeline](https://github.com/OlehDzhumyk/flask-react-messenger/actions/workflows/ci.yml/badge.svg)](https://github.com/OlehDzhumyk/flask-react-messenger/actions/workflows/ci.yml)
+
 A secure, self-hosted messaging application built with a Python Flask backend and a React (Vite) frontend. Designed with privacy and data control alternatives in mind.
 
 
 ## Features
 
 ### Core Functionality
-* **Secure Authentication:** JWT-based login and registration with password hashing (SHA-256).
+* **Secure Authentication:** JWT-based login and registration with salted password hashing (Werkzeug scrypt).
 * **1-to-1 Messaging:** Real-time feel using smart polling optimization (incremental fetching).
 * **Message History:** Persistent storage with PostgreSQL.
 * **Data Control:** Users have full ownership; Edit and Delete functionalities are native.
@@ -30,7 +32,7 @@ A secure, self-hosted messaging application built with a Python Flask backend an
 
 ### Infrastructure
 * **Containerization:** Docker & Docker Compose (Orchestration of DB, Backend, Frontend).
-* **CI/CD:** GitHub Actions (Automated testing pipeline).
+* **CI/CD:** GitHub Actions (backend tests with coverage, frontend lint & build).
 
 ## API Overview
 
@@ -56,18 +58,25 @@ The application uses a normalized relational schema:
 ## How to Run
 
 1.  **Prerequisites:** Ensure you have Docker and Docker Compose installed.
-2.  **Start the Application:**
+2.  **Create the environment file** (Docker Compose reads it from the project root):
+    ```bash
+    cp backend/.env.example .env
+    ```
+3.  **Start the Application:**
     ```bash
     docker-compose up --build
     ```
-3.  **Seed the Database (First Run Only):**
+4.  **Seed the Database (First Run Only):**
     Open a new terminal to populate the DB with test users and messages:
     ```bash
     docker-compose exec backend flask seed_db
     ```
-4.  **Access the App:**
+5.  **Access the App:**
     * **Frontend:** `http://localhost:3000`
     * **API Documentation (Swagger):** `http://localhost:5000/apidocs`
+
+> **macOS note:** port 5000 is used by the AirPlay Receiver. If the backend fails to start with
+> "address already in use", turn off AirPlay Receiver in *System Settings → General → AirDrop & Handoff*.
 
 ## Default Users (from Seed)
 

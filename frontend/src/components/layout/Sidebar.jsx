@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import userService from '../../services/userService';
 import chatService from '../../services/chatService';
 import { useAuth } from '../../context/AuthContext';
 import { useUsers } from '../../context/UsersContext';
@@ -12,7 +11,7 @@ import SidebarItem from './SidebarItem';
 import SettingsModal from './SettingsModal';
 import NewChatModal from './NewChatModal';
 
-const Sidebar = ({ onChatSelect, onUserSelect }) => {
+const Sidebar = ({ onChatSelect }) => {
     const [chats, setChats] = useState([]);
 
     // Local Filter State
@@ -26,7 +25,7 @@ const Sidebar = ({ onChatSelect, onUserSelect }) => {
     const { cacheUsers } = useUsers();
 
     // 1. Fetch Chats Logic
-    const fetchChats = async () => {
+    const fetchChats = useCallback(async () => {
         try {
             const data = await chatService.getAllChats();
             const chatList = Array.isArray(data) ? data : [];
@@ -40,11 +39,11 @@ const Sidebar = ({ onChatSelect, onUserSelect }) => {
         } catch (error) {
             console.error("[Sidebar] Failed to load chats", error);
         }
-    };
+    }, [cacheUsers]);
 
     useEffect(() => {
         if (currentUser) fetchChats();
-    }, [currentUser, cacheUsers]);
+    }, [currentUser, fetchChats]);
 
 
     // 2. Local Filter Logic
@@ -154,7 +153,6 @@ const Sidebar = ({ onChatSelect, onUserSelect }) => {
 
 Sidebar.propTypes = {
     onChatSelect: PropTypes.func.isRequired,
-    onUserSelect: PropTypes.func.isRequired,
 };
 
 export default Sidebar;

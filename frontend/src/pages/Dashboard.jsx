@@ -2,7 +2,6 @@ import { useState } from 'react';
 import MainLayout from '../components/layout/MainLayout';
 import Sidebar from '../components/layout/Sidebar';
 import ChatWindow from '../components/chat/ChatWindow';
-import chatService from '../services/chatService';
 import { useUsers } from '../context/UsersContext';
 import { useAuth } from '../context/AuthContext';
 import { getChatPartner } from '../utils/chatHelpers';
@@ -24,30 +23,10 @@ const Dashboard = () => {
         setActiveChat({ chatId: chat.id, partnerId: partner.id });
     };
 
-    const handleUserSelect = async (targetUser) => {
-        try {
-            cacheUsers([targetUser]);
-
-            // Optimistic UI or wait for backend creation
-            const chatData = await chatService.createChat(targetUser.id);
-
-            if (!chatData || !chatData.id) return;
-
-            console.log('[Dashboard] Created/Found chat:', chatData.id, 'Partner ID:', targetUser.id);
-            setActiveChat({
-                chatId: chatData.id,
-                partnerId: targetUser.id
-            });
-
-        } catch (error) {
-            console.error('[Dashboard] Failed to init chat', error);
-        }
-    };
-
     return (
         <MainLayout
             sidebar={
-                <Sidebar onChatSelect={handleChatSelect} onUserSelect={handleUserSelect} />
+                <Sidebar onChatSelect={handleChatSelect} />
             }
         >
             {activeChat ? (

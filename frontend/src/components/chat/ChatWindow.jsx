@@ -72,7 +72,7 @@ const ChatWindow = ({ activeChat }) => {
                     });
                     lastIdRef.current = newMsgs[newMsgs.length - 1].id;
                 }
-            } catch (error) {
+            } catch {
                 // Silent fail for polling
             }
         };

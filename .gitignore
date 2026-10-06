@@ -24,3 +24,6 @@ build/
 
 # Docker Data
 postgres_data/
+
+# Vite cache
+.vite/
